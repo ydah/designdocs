@@ -1,0 +1,26 @@
+---
+interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+
+interface Props {
+  headings: Heading[];
+}
+
+const { headings } = Astro.props;
+const visibleHeadings = headings.filter((heading) => heading.depth <= 3);
+---
+<aside class="table-of-contents" data-pagefind-ignore="all">
+  {visibleHeadings.length > 0 && (
+    <details open>
+      <summary>目次</summary>
+      <ul>
+        {visibleHeadings.map((heading) => (
+          <li class={`depth-${heading.depth}`}><a href={`#${heading.slug}`}>{heading.text}</a></li>
+        ))}
+      </ul>
+    </details>
+  )}
+</aside>

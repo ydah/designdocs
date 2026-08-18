@@ -1,0 +1,17 @@
+---
+import type { DocMeta } from '../lib/docs';
+
+interface Props {
+  status: DocMeta['status'];
+}
+
+const { status } = Astro.props;
+const labels = {
+  draft: '下書き',
+  proposed: '提案中',
+  accepted: '採用',
+  rejected: '見送り',
+  superseded: '置換済み',
+} satisfies Record<DocMeta['status'], string>;
+---
+<span class={`status-badge status-${status}`}>{labels[status]}</span>

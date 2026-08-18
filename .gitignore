@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.astro/
+.DS_Store
+
+# Local search assets copied from a production build.
+public/pagefind/
+
+# Environment files may contain deployment-specific URLs.
+.env
+.env.*
+!.env.example

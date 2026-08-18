@@ -1,0 +1,34 @@
+---
+import Base from '../../layouts/Base.astro';
+import DocCard from '../../components/DocCard.astro';
+import { byUpdated, getRepoMap } from '../../lib/docs';
+import { getDocs } from '../../lib/docs';
+
+export async function getStaticPaths() {
+  const repos = getRepoMap(await getDocs());
+  return [...repos.entries()].map(([repo, docs]) => ({
+    params: { repo },
+    props: { repo, docs: docs.sort(byUpdated) },
+  }));
+}
+
+const { repo, docs } = Astro.props;
+const statuses = ['accepted', 'proposed', 'draft', 'superseded', 'rejected'] as const;
+---
+<Base title={`${repo} のドキュメント`}>
+  <p class="eyebrow">Repository</p>
+  <h1>{repo}</h1>
+  <p class="muted">{docs.length} documents</p>
+  {statuses.map((status) => {
+    const statusDocs = docs.filter((doc) => doc.status === status);
+    if (!statusDocs.length) return null;
+    return (
+      <section>
+        <h2>{status}</h2>
+        <div class="doc-list">
+          {statusDocs.map((doc) => <DocCard doc={doc} />)}
+        </div>
+      </section>
+    );
+  })}
+</Base>

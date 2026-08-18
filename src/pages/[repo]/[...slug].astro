@@ -1,0 +1,26 @@
+---
+import { render } from 'astro:content';
+import { backlinksFor } from '../../lib/backlinks';
+import { byUpdated, getDocs } from '../../lib/docs';
+import DocLayout from '../../layouts/DocLayout.astro';
+
+export async function getStaticPaths() {
+  const docs = (await getDocs()).sort(byUpdated);
+  const backlinks = new Map(docs.map((doc) => [doc.id, backlinksFor(docs, doc.id)]));
+  const byId = new Map(docs.map((doc) => [doc.id, doc]));
+  return docs.map((doc) => ({
+    params: { repo: doc.repo, slug: doc.slug },
+    props: {
+      doc,
+      backlinks: backlinks.get(doc.id) ?? [],
+      supersededDoc: doc.supersededBy ? byId.get(doc.supersededBy) : undefined,
+    },
+  }));
+}
+
+const { doc, backlinks, supersededDoc } = Astro.props;
+const { Content, headings } = await render(doc.entry);
+---
+<DocLayout doc={doc} headings={headings} backlinks={backlinks} supersededDoc={supersededDoc}>
+  <Content />
+</DocLayout>

@@ -1,0 +1,10 @@
+pre-commit:
+  parallel: false
+  commands:
+    doc-dates:
+      glob: "src/content/docs/**/*.md"
+      run: "node scripts/update-doc-dates.mjs {staged_files} && git add {staged_files}"
+    validate-docs:
+      run: "node scripts/validate-docs.mjs"
+    typecheck:
+      run: "npx astro check"

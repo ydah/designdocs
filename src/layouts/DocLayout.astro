@@ -1,0 +1,55 @@
+---
+import type { DocMeta } from '../lib/docs';
+import { docUrl } from '../lib/docs';
+import Backlinks from '../components/Backlinks.astro';
+import StatusBadge from '../components/StatusBadge.astro';
+import TagList from '../components/TagList.astro';
+import TableOfContents from '../components/TableOfContents.astro';
+import Base from './Base.astro';
+
+interface Props {
+  doc: DocMeta;
+  headings: { depth: number; slug: string; text: string }[];
+  backlinks: DocMeta[];
+  supersededDoc?: DocMeta;
+  children: unknown;
+}
+
+const { doc, headings, backlinks, supersededDoc } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const formatDate = (date?: Date) => date?.toISOString().slice(0, 10);
+const description = `${doc.repo} の設計ドキュメント「${doc.title}」`;
+const ogImage = `${base}/og/${doc.id}.svg`;
+---
+<Base title={doc.title} description={description} ogImage={ogImage}>
+  <article class="doc" data-pagefind-body>
+    <header class="doc-header">
+      <p class="breadcrumb"><a href={`${base}/repos/${doc.repo}/`}>{doc.repo}</a> / {doc.slug}</p>
+      <div class="doc-heading-meta">
+        <StatusBadge status={doc.status} />
+        <span class="visually-hidden">repo:</span><span data-pagefind-filter="repo">{doc.repo}</span>
+        <span class="visually-hidden">status:</span><span data-pagefind-filter="status">{doc.status}</span>
+      </div>
+      {!doc.hasH1 && <h1 data-pagefind-meta="title">{doc.title}</h1>}
+      {doc.hasH1 && <h1 class="visually-hidden" data-pagefind-meta="title">{doc.title}</h1>}
+      {(doc.created || doc.updated || doc.decided) && (
+        <p class="dates">
+          {doc.created && <span>作成 <time datetime={doc.created.toISOString()}>{formatDate(doc.created)}</time></span>}
+          {doc.updated && <span>更新 <time datetime={doc.updated.toISOString()}>{formatDate(doc.updated)}</time></span>}
+          {doc.decided && <span>決定 <time datetime={doc.decided.toISOString()}>{formatDate(doc.decided)}</time></span>}
+        </p>
+      )}
+      <TagList tags={doc.tags} base={base} />
+    </header>
+
+    {doc.status === 'superseded' && supersededDoc && (
+      <aside class="notice notice-warning">
+        このドキュメントは <a href={docUrl(supersededDoc, base)}>{supersededDoc.title}</a> に置き換えられました。
+      </aside>
+    )}
+
+    <div class="doc-body"><slot /></div>
+    <Backlinks backlinks={backlinks} />
+  </article>
+  <TableOfContents slot="aside" headings={headings} />
+</Base>

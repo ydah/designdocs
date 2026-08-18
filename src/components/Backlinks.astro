@@ -1,0 +1,19 @@
+---
+import type { DocMeta } from '../lib/docs';
+import { docUrl } from '../lib/docs';
+
+interface Props {
+  backlinks: DocMeta[];
+}
+
+const { backlinks } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+{backlinks.length > 0 && (
+  <section class="backlinks" data-pagefind-ignore>
+    <h2>🔗 このドキュメントへのリンク</h2>
+    <ul>
+      {backlinks.map((doc) => <li><a href={docUrl(doc, base)}>{doc.title}</a> <small>({doc.repo})</small></li>)}
+    </ul>
+  </section>
+)}

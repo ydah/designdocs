@@ -1,0 +1,23 @@
+---
+import type { DocMeta } from '../lib/docs';
+import { docUrl } from '../lib/docs';
+import StatusBadge from './StatusBadge.astro';
+
+interface Props {
+  doc: DocMeta;
+  showRepo?: boolean;
+}
+
+const { doc, showRepo = false } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const date = doc.updated ?? doc.created;
+---
+<article class="doc-card">
+  <div class="doc-card-meta">
+    {showRepo && <a class="repo-label" href={`${base}/repos/${encodeURIComponent(doc.repo)}/`}>{doc.repo}</a>}
+    <StatusBadge status={doc.status} />
+    {date && <time datetime={date.toISOString()}>{date.toISOString().slice(0, 10)}</time>}
+  </div>
+  <h2><a href={docUrl(doc, base)}>{doc.title}</a></h2>
+  {doc.tags.length > 0 && <p class="card-tags">{doc.tags.map((tag) => `#${tag}`).join(' ')}</p>}
+</article>

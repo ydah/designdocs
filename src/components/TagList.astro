@@ -1,0 +1,15 @@
+---
+import { tagUrl } from '../lib/tags.mjs';
+
+interface Props {
+  tags: string[];
+  base?: string;
+}
+
+const { tags, base = '' } = Astro.props;
+---
+{tags.length > 0 && (
+  <ul class="tags" aria-label="タグ">
+    {tags.map((tag) => <li><a class="tag" href={tagUrl(tag, base)}>#{tag}</a></li>)}
+  </ul>
+)}

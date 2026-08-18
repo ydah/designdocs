@@ -1,0 +1,22 @@
+---
+import Base from '../../layouts/Base.astro';
+import DocCard from '../../components/DocCard.astro';
+import { byUpdated, getDocs, getTagMap } from '../../lib/docs';
+
+export async function getStaticPaths() {
+  const tags = getTagMap(await getDocs());
+  return [...tags.entries()].map(([tag, docs]) => ({
+    params: { tag },
+    props: { tag, docs: docs.sort(byUpdated) },
+  }));
+}
+
+const { tag, docs } = Astro.props;
+---
+<Base title={`#${tag}`}>
+  <p class="eyebrow">Tag</p>
+  <h1>#{tag}</h1>
+  <div class="doc-list">
+    {docs.map((doc) => <DocCard doc={doc} showRepo />)}
+  </div>
+</Base>

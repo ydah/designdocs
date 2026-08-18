@@ -1,0 +1,36 @@
+---
+import Base from '../layouts/Base.astro';
+import DocCard from '../components/DocCard.astro';
+import { byUpdated, getDocs, getRepoMap } from '../lib/docs';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const docs = (await getDocs()).sort(byUpdated);
+const repos = [...getRepoMap(docs).entries()].sort(([a], [b]) => a.localeCompare(b, 'en'));
+---
+<Base title="設計判断を集める場所">
+  <section class="hero">
+    <p class="eyebrow">Design decisions in Markdown</p>
+    <h1>設計判断を、あとから辿れる形で残す。</h1>
+    <p>リポジトリをまたぐ設計ドキュメントを、状態・タグ・リンク付きで管理します。決めたことだけでなく、採用しなかった理由も記録します。</p>
+    <p><a class="button" href={`${base}/repos/`}>リポジトリから探す</a> <a href={`${base}/search/`}>全文検索</a></p>
+  </section>
+
+  <section>
+    <div class="section-heading"><h2>最近更新されたドキュメント</h2><a href={`${base}/repos/`}>すべて見る</a></div>
+    <div class="doc-list">
+      {docs.slice(0, 8).map((doc) => <DocCard doc={doc} showRepo />)}
+    </div>
+  </section>
+
+  <section>
+    <h2>リポジトリ</h2>
+    <div class="repo-grid">
+      {repos.map(([repo, repositoryDocs]) => (
+        <a class="repo-card" href={`${base}/repos/${repo}/`}>
+          <h2>{repo}</h2>
+          <p>{repositoryDocs.length} documents</p>
+        </a>
+      ))}
+    </div>
+  </section>
+</Base>

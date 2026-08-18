@@ -1,0 +1,20 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getDocs, getRepoMap } from '../../lib/docs';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const repos = [...getRepoMap(await getDocs()).entries()].sort(([a], [b]) => a.localeCompare(b, 'en'));
+---
+<Base title="リポジトリ一覧">
+  <p class="eyebrow">Repositories</p>
+  <h1>リポジトリ一覧</h1>
+  <p class="muted">設計ドキュメントを対象リポジトリごとにまとめています。</p>
+  <div class="repo-grid">
+    {repos.map(([repo, docs]) => (
+      <a class="repo-card" href={`${base}/repos/${repo}/`}>
+        <h2>{repo}</h2>
+        <p>{docs.length} documents</p>
+      </a>
+    ))}
+  </div>
+</Base>

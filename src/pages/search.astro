@@ -1,0 +1,22 @@
+---
+import Base from '../layouts/Base.astro';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+<Base title="検索">
+  <h1>🔍 ドキュメントを検索</h1>
+  <p class="muted">タイトル・本文・タグを横断して検索できます。</p>
+  <div class="search-layout">
+    <aside class="search-filters" data-pagefind-ignore>
+      <pagefind-filter-pane open="repo,status"></pagefind-filter-pane>
+    </aside>
+    <section class="search-results">
+      <pagefind-config bundle-path={`${base}/pagefind/`} base-url={`${base}/`} lang="ja" preload></pagefind-config>
+      <pagefind-input placeholder="キーワードを入力"></pagefind-input>
+      <pagefind-summary></pagefind-summary>
+      <pagefind-results></pagefind-results>
+    </section>
+  </div>
+  <link rel="stylesheet" href={`${base}/pagefind/pagefind-component-ui.css`} />
+  <script is:inline type="module" src={`${base}/pagefind/pagefind-component-ui.js`}></script>
+</Base>

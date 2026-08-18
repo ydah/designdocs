@@ -1,0 +1,65 @@
+---
+import { byUpdated, getDocs, getRepoMap, getTagMap } from '../lib/docs';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const docs = (await getDocs()).sort(byUpdated);
+const repos = [...getRepoMap(docs).entries()]
+  .sort(([a], [b]) => a.localeCompare(b, 'en'))
+  .slice(0, 20);
+const tags = [...getTagMap(docs).entries()]
+  .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+  .slice(0, 20);
+---
+<button class="menu-toggle" type="button" aria-controls="site-sidebar" aria-expanded="false">☰</button>
+<aside id="site-sidebar" class="sidebar" data-pagefind-ignore="all">
+  <a class="site-title" href={`${base}/`}>design docs</a>
+  <nav aria-label="サイトメニュー">
+    <a href={`${base}/search/`}>🔍 検索</a>
+    <a href={`${base}/repos/`}>📁 リポジトリ <small>{repos.length}</small></a>
+    <a href={`${base}/tags/`}>🏷️ タグ</a>
+  </nav>
+
+  <section class="sidebar-section">
+    <h2>最近のドキュメント</h2>
+    <ul class="sidebar-list">
+      {docs.slice(0, 20).map((doc) => <li><a href={`${base}/${doc.id}/`}>{doc.title}</a></li>)}
+    </ul>
+  </section>
+
+  {repos.length > 0 && (
+    <section class="sidebar-section">
+      <h2>リポジトリ</h2>
+      <ul class="sidebar-list">
+        {repos.map(([repo, repositoryDocs]) => <li><a href={`${base}/repos/${repo}/`}>{repo} <small>{repositoryDocs.length}</small></a></li>)}
+      </ul>
+    </section>
+  )}
+
+  {tags.length > 0 && (
+    <section class="sidebar-section">
+      <h2>よく使うタグ</h2>
+      <ul class="sidebar-list">
+        {tags.map(([tag, taggedDocs]) => <li><a href={`${base}/tags/${encodeURIComponent(tag)}/`}>#{tag} <small>{taggedDocs.length}</small></a></li>)}
+      </ul>
+    </section>
+  )}
+
+  <button id="theme-toggle" class="theme-toggle" type="button">🌙 テーマ切替</button>
+</aside>
+
+<script>
+  const menu = document.querySelector('.menu-toggle');
+  const theme = document.querySelector('#theme-toggle');
+
+  menu?.addEventListener('click', () => {
+    const open = document.body.classList.toggle('sidebar-open');
+    menu.setAttribute('aria-expanded', String(open));
+  });
+
+  theme?.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('theme', next); } catch {}
+    window.dispatchEvent(new CustomEvent('theme-change', { detail: next }));
+  });
+</script>

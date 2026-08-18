@@ -1,0 +1,20 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getDocs, getTagMap } from '../../lib/docs';
+import { tagUrl } from '../../lib/tags.mjs';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const tags = [...getTagMap(await getDocs()).entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+const maxCount = tags[0]?.[1].length ?? 1;
+---
+<Base title="タグ一覧">
+  <p class="eyebrow">Tags</p>
+  <h1>タグ一覧</h1>
+  <div class="tag-cloud">
+    {tags.map(([tag, docs]) => (
+      <a href={tagUrl(tag, base)} style={`--tag-size: ${1 + (docs.length / maxCount) * 1.1}rem`}>
+        #{tag} <small>{docs.length}</small>
+      </a>
+    ))}
+  </div>
+</Base>

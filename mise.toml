@@ -1,0 +1,10 @@
+[tools]
+node = "22"
+
+[tasks.check]
+description = "Run Astro's type and content checks"
+run = "npm run check"
+
+[tasks.build]
+description = "Build the static site and Pagefind index"
+run = "npm run build"
