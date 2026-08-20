@@ -13,14 +13,14 @@ const tags = [...getTagMap(docs).entries()]
 <button class="menu-toggle" type="button" aria-controls="site-sidebar" aria-expanded="false">☰</button>
 <aside id="site-sidebar" class="sidebar" data-pagefind-ignore="all">
   <a class="site-title" href={`${base}/`}>design docs</a>
-  <nav aria-label="サイトメニュー">
-    <a href={`${base}/search/`}>🔍 検索</a>
-    <a href={`${base}/repos/`}>📁 リポジトリ <small>{repos.length}</small></a>
-    <a href={`${base}/tags/`}>🏷️ タグ</a>
+  <nav aria-label="Site menu">
+    <a href={`${base}/search/`}>🔍 Search</a>
+    <a href={`${base}/repos/`}>📁 Repositories <small>{repos.length}</small></a>
+    <a href={`${base}/tags/`}>🏷️ Tags</a>
   </nav>
 
   <section class="sidebar-section">
-    <h2>最近のドキュメント</h2>
+    <h2>Recent Documents</h2>
     <ul class="sidebar-list">
       {docs.slice(0, 20).map((doc) => <li><a href={`${base}/${doc.id}/`}>{doc.title}</a></li>)}
     </ul>
@@ -28,7 +28,7 @@ const tags = [...getTagMap(docs).entries()]
 
   {repos.length > 0 && (
     <section class="sidebar-section">
-      <h2>リポジトリ</h2>
+      <h2>Repositories</h2>
       <ul class="sidebar-list">
         {repos.map(([repo, repositoryDocs]) => <li><a href={`${base}/repos/${repo}/`}>{repo} <small>{repositoryDocs.length}</small></a></li>)}
       </ul>
@@ -37,14 +37,14 @@ const tags = [...getTagMap(docs).entries()]
 
   {tags.length > 0 && (
     <section class="sidebar-section">
-      <h2>よく使うタグ</h2>
+      <h2>Popular Tags</h2>
       <ul class="sidebar-list">
         {tags.map(([tag, taggedDocs]) => <li><a href={`${base}/tags/${encodeURIComponent(tag)}/`}>#{tag} <small>{taggedDocs.length}</small></a></li>)}
       </ul>
     </section>
   )}
 
-  <button id="theme-toggle" class="theme-toggle" type="button">🌙 テーマ切替</button>
+  <button id="theme-toggle" class="theme-toggle" type="button">🌙 Toggle Theme</button>
 </aside>
 
 <script>
