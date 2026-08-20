@@ -1,7 +1,9 @@
 node_modules/
 dist/
-.astro/
 .DS_Store
+/.astro/
+/.idea/
+/.vscode/
 
 # Local search assets copied from a production build.
 public/pagefind/
