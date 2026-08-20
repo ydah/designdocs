@@ -13,6 +13,8 @@ npm run dev
 
 `src/content/docs/<repo>/<slug>.md` にドキュメントを追加すると、`/<repo>/<slug>/` にページが生成されます。ファイル名は `0001-kebab-case.md` 形式、リポジトリ名は kebab-case で付けます。
 
+ドキュメントの設計原則、状態、リンク、更新手順の詳細は [`AGENTS.md`](AGENTS.md) を参照してください。
+
 ```sh
 npm run new-doc -- my-api-server "PostgreSQL を採用する"
 npm run check
@@ -33,11 +35,11 @@ created: 2026-08-18
 updated: 2026-08-18
 decided: 2026-08-20
 superseded_by: 0007-move-to-cockroachdb
-related: [_shared/0001-design-docs-repository]
+related: [billing/0003-transaction-boundaries]
 ---
 ```
 
-`created` / `updated` は pre-commit hook がコミット日付から自動付与します。`[[slug]]` は同じリポジトリ内、見つからなければ `_shared/` のドキュメントへリンクします。`[[repo/slug|表示テキスト]]` で対象を明示できます。
+`created` / `updated` は pre-commit hook がコミット日付から自動付与します。`[[slug]]` は同じリポジトリ内、`[[repo/slug|表示テキスト]]` は別リポジトリのドキュメントへリンクします。
 
 ## 状態
 

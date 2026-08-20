@@ -9,10 +9,10 @@ test('normalizes tags to lower kebab-case', () => {
   assert.equal(normalizeTag('Static Site'), 'static-site');
 });
 
-test('resolves a wikilink in repository-first order', () => {
-  const ids = new Set(['_shared/0001-auth', 'api/0001-auth', 'api/0002-client']);
+test('resolves local and explicit cross-repository wikilinks', () => {
+  const ids = new Set(['api/0001-auth', 'api/0002-client']);
   assert.equal(resolveTarget('0001-auth', 'api', ids), 'api/0001-auth');
-  assert.equal(resolveTarget('0001-auth', 'worker', ids), '_shared/0001-auth');
+  assert.equal(resolveTarget('0001-auth', 'worker', ids), undefined);
   assert.equal(resolveTarget('api/0002-client', 'worker', ids), 'api/0002-client');
   assert.equal(resolveTarget('missing', 'api', ids), undefined);
 });

@@ -8,7 +8,7 @@ if (!repo || !title) {
   console.error('使い方: npm run new-doc -- <repo> <title>');
   process.exit(1);
 }
-if (!/^(?:_shared|[a-z0-9]+(?:-[a-z0-9]+)*)$/.test(repo) || ['og', 'repos', 'tags'].includes(repo)) {
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(repo) || ['og', 'repos', 'tags'].includes(repo)) {
   console.error(`リポジトリ名が不正です: ${repo}`);
   process.exit(1);
 }

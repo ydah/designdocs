@@ -3,7 +3,7 @@ import path from 'node:path';
 import matter from 'gray-matter';
 
 const DOC_FILE = /^(\d{4})-([a-z0-9]+(?:-[a-z0-9]+)*)\.md$/;
-const REPO_DIR = /^(?:_shared|[a-z0-9]+(?:-[a-z0-9]+)*)$/;
+const REPO_DIR = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const RESERVED_REPOS = new Set(['og', 'repos', 'tags']);
 
 const walkMarkdownFiles = (root) => {
@@ -61,10 +61,7 @@ export const resolveTarget = (target, currentRepo, ids) => {
   if (ids.has(normalized)) return normalized;
 
   const sameRepository = `${currentRepo}/${normalized}`;
-  if (ids.has(sameRepository)) return sameRepository;
-
-  const shared = `_shared/${normalized}`;
-  return ids.has(shared) ? shared : undefined;
+  return ids.has(sameRepository) ? sameRepository : undefined;
 };
 
 export const buildDocIndex = (root, { strictWikilinks = false } = {}) => {
