@@ -1,18 +1,51 @@
 ---
 created: 2026-08-20
 title: Lrama に PSLR(1) パーサ生成を導入する
-description: 構文的左文脈に応じて字句候補を制約する PSLR(1) パーサ生成の設計と実装評価
+description: PSLR(1) パーサ生成の構成、論文との差分、マージ前に必要な修正をまとめた設計提案
 status: proposed
 tags: [lrama, pslr, parser-generator, lexer, language-composition]
 authors: [ydah]
 updated: 2026-08-20
 ---
 
-対象: [ruby/lrama#774 "Add support PSLR(1) parser generation"](https://github.com/ruby/lrama/pull/774)（author: ydah / branch `pslr_parser` / base `1e9294d` / 15 commits / 102 files / +13,397 −545 / **open**）
+| 項目 | 内容 |
+| --- | --- |
+| 対象リポジトリ | [ruby/lrama](https://github.com/ruby/lrama) |
+| 対象実装 | [ruby/lrama#774 Add support PSLR(1) parser generation](https://github.com/ruby/lrama/pull/774) |
+| 調査時点 | 2026-08-20 |
+| PR スナップショット | open、15 commits、102 files、+13,397 / −545、branch `pslr_parser`、base `1e9294d` |
+| 基準文献 | Joel E. Denny, [*PSLR(1): Pseudo-Scannerless Minimal LR(1) for the Deterministic Parsing of Composite Languages*](https://open.clemson.edu/all_dissertations/519/), Ph.D. Dissertation, Clemson University, May 2010 |
+| 文書の目的 | 実装構造と論文との差分を整理し、マージ前の必須修正と段階的な改善方針を示す |
+| 検証範囲 | PR のソースコードと論文の静的読解。RSpec と生成 C コードのコンパイルは未実施 |
 
-基準文献: Joel E. Denny, *PSLR(1): Pseudo-Scannerless Minimal LR(1) for the Deterministic Parsing of Composite Languages*, Ph.D. Dissertation, Clemson University, May 2010（以下「論文」。節番号・定義番号はすべて論文のもの）
+Lrama に、現在のパーサ状態が受理できるトークンだけを字句候補にする **PSLR(1)** パーサ生成を追加する提案である。複合言語で生じる字句の曖昧性を構文的左文脈で解決し、未解決の scanner conflict は生成時に報告する。
 
-> 注記: 本書は PR のソースコードと論文の静的読解にもとづく。検証環境に Ruby が無いため RSpec / 生成 C コードのコンパイルは実行していない。「要検証」と記した項目は実機確認が必要。
+## 提案
+
+- `%define lr.type pslr` を指定した文法だけで PSLR(1) 生成を有効にし、既存の LALR(1) / IELR(1) 経路は変更しない。
+- `%token-pattern`、`%lex-prec`、`%lex-tie`、layout トークンを導入し、pseudo-scanner の候補制約と衝突解決を文法側で宣言できるようにする。
+- 生成パーサが字句解析を所有する pure モードと、既存レキサから問い合わせる bridge モードを提供する。
+- コアアルゴリズムは PR の構成を採用するが、生成コードの無条件シンボル出力と状態型の型パニングはマージ前に修正する。
+- IELR 拡張の近似、LAC の確保コスト、テーブルサイズは、実文法で計測しながら段階的に改善する。
+
+## 判断理由
+
+PSLR(1) は、`>` と `>>` のように同じ入力接頭辞が構文文脈によって別トークンになる問題を、手書きのレキサ状態だけに依存せず扱える。PR は conflict profile、`scanner_accepts`、`length_precedences`、fallback、LAC、layout という論文の中心要素を実装し、既存生成経路から opt-in で隔離している。
+
+一方、生成される全パーサへの外部シンボル混入と、状態型のサイズを仮定した読み出しは既存利用者や生成コードの正当性に影響する。そのため、機能全体は提案として維持しつつ、P1 の2件をマージ条件とする。
+
+## 影響範囲
+
+変更対象は Lrama の文法ディレクティブ、状態計算、scanner FSA、衝突検証、レポート、C テーブル生成、`yacc.c` テンプレートである。`lr.type=pslr` を指定しない既存文法の生成結果は対象外とする。PSLR 利用者には新しい字句宣言と、pure / bridge のいずれかの入力統合が必要になる。
+
+## この文書の読み方
+
+| 読者 | 最初に確認する節 |
+| --- | --- |
+| 提案をレビューする人 | 提案、判断理由、論文との差分、実装評価、残課題とロードマップ |
+| 文法の利用者 | 背景と目的、外部仕様、ランタイムの動作モード |
+| 実装する人 | 全体アーキテクチャ、生成時アルゴリズム、生成 C コード、マージ前に必須 |
+| 論文との対応を確認する人 | 論文との差分、用語対応表、参考リンク |
 
 ## 1. 背景と目的
 
@@ -52,43 +85,21 @@ Ruby の `parse.y` は `lex_state_e`（`EXPR_BEG` / `EXPR_END` / `EXPR_ARG` / `E
 
 ### 2.1 パイプライン
 
-```text
- .y ファイル
-    │
-    ▼
- Lrama::Lexer / Lrama::Parser (parser.y)
-    │  %token-pattern / %token-action / %lex-prec /
-    │  %lex-tie / %lex-no-tie / %symbol-set / %lexer-context
-    ▼
- Lrama::Grammar
-    │  ・token_patterns, lex_prec(宣言), lex_tie(宣言), symbol_sets
-    │  ・%define: lr.type=pslr, api.pslr.*, parse.lac, pslr.*
-    ▼
- Lrama::States#compute            … LALR(1) 基底テーブル
-    │
-    ▼
- Lrama::States#compute_pslr       ★本 PR の中核
-    ├ Phase 1  predecessors / follow_kernel_items / always_follows / goto_follows
-    ├ Phase 2  build_scanner_fsa        → ScannerFSA (Σs)
-    │          build_length_precedences → LengthPrecedences
-    │          compute_inadequacy_annotations （既存 IELR のまま）
-    ├ Phase 3a split_states  ← PSLR 互換性判定を挿入（Pslr::PairwiseResolution）
-    ├ Phase 3b split_states_by_context  ← Lrama 独自（%lexer-context 時のみ）
-    ├ Phase 4  clear/compute_look_ahead_sets
-    ├ Phase 5  compute_conflicts(:ielr) / compute_default_reduction
-    │          build_scanner_accepts    → State::ScannerAccepts（+ fallback 行）
-    │          handle_pslr_inadequacies
-    └ Phase 6  再 classify_lexer_contexts / finalize_pslr_metrics
-    │
-    ▼
- States#validate!  … 状態増加ガード / scanner conflict / inadequacy /
-    │                pure モード網羅性 / useless %lex-prec / tie 候補
-    ▼
- Lrama::Context → Lrama::Output → template/bison/yacc.c (ERB)
-    │
-    ▼
- 生成 C: FSA 表, scanner_accepts, length_precedences,
-         yy_pseudo_scan_result, LAC, （pure モードなら yylex）
+```mermaid
+flowchart TD
+    A[".y ファイル"] --> B["Lrama::Lexer / Lrama::Parser"]
+    B --> C["Lrama::Grammar<br/>字句宣言と %define を保持"]
+    C --> D["States#compute<br/>LALR(1) 基底テーブル"]
+    D --> E1["Phase 1<br/>predecessors / follows"]
+    E1 --> E2["Phase 2<br/>ScannerFSA / LengthPrecedences / IELR annotations"]
+    E2 --> E3["Phase 3a<br/>PSLR 互換性による状態分割"]
+    E3 --> E4["Phase 3b<br/>lexer context による状態分割"]
+    E4 --> E5["Phase 4<br/>lookahead 集合の再計算"]
+    E5 --> E6["Phase 5<br/>conflicts / default reduction / scanner_accepts"]
+    E6 --> E7["Phase 6<br/>context 再分類 / metrics 確定"]
+    E7 --> F["States#validate!<br/>conflict・inadequacy・網羅性を検証"]
+    F --> G["Context → Output → yacc.c"]
+    G --> H["生成 C<br/>FSA 表 / scanner_accepts / LAC / yylex"]
 ```
 
 ### 2.2 ファイル構成と責務
@@ -625,7 +636,7 @@ Lrama は shorter-wins でも `current_tokens.include?(result.token_name)` な�
 
 ### 7.2 修正すべき問題
 
-#### 🔴 P1: `yy_state_*_accepts_token` が全パーサに無条件出力される
+#### P1: `yy_state_*_accepts_token` が全パーサに無条件出力される
 
 `template/bison/yacc.c` で、この 3 関数は `<%- if output.pslr_enabled? -%>` ガードの**外**にある。つまり Lrama が生成する**すべての**パーサに、`static` でない外部リンケージのシンボルとして混入する。
 
@@ -635,7 +646,7 @@ Lrama は shorter-wins でも `current_tokens.include?(result.token_name)` な�
 
 → `pslr_enabled?` ガード内に移し、`static` を付けるべき。
 
-#### 🔴 P1: `yy_state_deep_accepts_token` の型パニング
+#### P1: `yy_state_deep_accepts_token` の型パニング
 
 ```c
 typedef short yy_state_t_compat;
@@ -646,7 +657,7 @@ const yy_state_t_compat *stack_base = (const yy_state_t_compat *)stack_base_v;
 
 → `void*` 経由をやめて `yy_state_t*` を直接受けるか、テンプレート変数で正しい型を埋め込む。
 
-#### 🟠 P2: LAC が呼び出しごとに `YYMALLOC`
+#### P2: LAC が呼び出しごとに `YYMALLOC`
 
 `yy_lac_check_` は毎回 `YYMAXDEPTH * sizeof(yy_state_t)`（既定 10,000 要素）を確保して解放する。Bison 本家の LAC は `yyesa` / `yyes` の再利用バッファを持つ。
 
@@ -657,7 +668,7 @@ Ruby の `parse.y` 規模で常時 LAC を有効にすると無視できない�
 
 → パーサごとの再利用バッファ化、および `yyss` と同じ拡張ロジックへの追随。
 
-#### 🟠 P2: 生成テーブルが非圧縮かつ全部 `int`
+#### P2: 生成テーブルが非圧縮かつ全部 `int`
 
 - `yy_scanner_transition[N_fsa][256]` を `int` で持つ。FSA 状態 2,000・4 バイトなら 2 MB
 - `yy_scanner_accepts[N_parser][N_accepting]` も `int` の密行列
@@ -667,7 +678,7 @@ Lrama/Bison が `yytable` 等で行っている `yytype_int8` 選択・行圧縮
 
 → 最小整数型の選択、`length_precedes` の bitset 化、遷移表の行共有・default 遷移導入。
 
-#### 🟠 P2: `merge_lookaheads` のバグ修正が PSLR PR に混入
+#### P2: `merge_lookaheads` のバグ修正が PSLR PR に混入
 
 ```ruby
 -  state.item_lookahead_set = state.item_lookahead_set.merge {|_, v1, v2| v1 | v2 }
@@ -678,11 +689,11 @@ Lrama/Bison が `yytable` 等で行っている `yytype_int8` 選択・行圧縮
 
 → 別 PR に切り出すべき。IELR 利用者に影響する挙動変更が 13k 行の実験的機能に埋もれるのは危険。同じ理由で、`Command#call` における `validate!` の呼び出し位置の変更（レポート・出力より**前**に移動）も、失敗時に部分出力が生成されなくなる挙動変更であり、切り分けたい。
 
-#### 🟡 P3: 過剰分割（6.3 (A)(B)）
+#### P3: 過剰分割（6.3 (A)(B)）
 
 設計上の近似に起因する。論文の pairwise 化（対ごとの解決結果を事前計算して比較）に寄せるだけで、`<<` / `-<` 使用時の不要分割はかなり減るはず。IELR phase 2 の PSLR 注釈は工数が大きいので、まず (B) の是正を推奨。
 
-#### 🟡 P3: `%lexer-context` 分割の状態共有
+#### P3: `%lexer-context` 分割の状態共有
 
 `create_context_split_state` が
 ```ruby
@@ -691,16 +702,16 @@ new_state.pslr_item_lookahead_set = original.pslr_item_lookahead_set
 ```
 と**同一オブジェクトを参照共有**している。後段の `merge_lookaheads` が破壊的に置換するのでハッシュ自体は差し替わるが、共有中に読まれる経路が無いかは要確認。直後の phase 4 で `clear_look_ahead_sets` → `compute_look_ahead_sets` が走るため実害は限定的と思われるが、`dup` するのが安全。
 
-#### 🟡 P3: 性能上の細かい懸念
+#### P3: 性能上の細かい懸念
 
 - `LexPrec#identity_precedes?` が規則配列の線形走査。profile 解決の内側ループから呼ばれる → 規則数 × プロファイル数。ハッシュ索引化すべき（useless 追跡のために index が要るなら `Hash[[winner,loser]] => rule_index` で足りる）
 - `ScannerFSA#pairwise_conflict_pairs` がメモ化されておらず、呼ぶたびに全状態 DFS。主要経路では 3 回程度だが `pairwise_conflict?` 経由だと危険
 
-#### 🟡 P3: レポートの規模
+#### P3: レポートの規模
 
 `Reporter::Pslr#report_acceptable_tokens` / `report_scanner_accepts` が全パーサ状態を列挙する。Ruby の `parse.y` 規模（数千状態）では出力が実用外になる。状態範囲指定か閾値が要る。
 
-#### 🟢 P4: 細かい指摘
+#### P4: 細かい指摘
 
 - `state/scanner_accepts.rb` 冒頭の `%lex-scope` 言及は未実装機能への参照。削除
 - `scanner_accepts_table_code` は `@context.states.states` 全体で行を出すが、構築は `reachable_parser_states` のみ。到達不能状態の行が全 `-1` で埋まる（無害だが表サイズの無駄）
