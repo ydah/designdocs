@@ -9,6 +9,9 @@
   --broken: #b42318;
   --border: #ded8cc;
   --code-bg: #f0ece4;
+  --code-block-bg: #0d1117;
+  --code-block-border: #30363d;
+  --code-block-fg: #e6edf3;
   --accent: #e7ddf4;
   --warning-bg: #fff3d6;
   --warning-border: #e0a426;
@@ -117,8 +120,35 @@ h2 { margin-top: 2.5rem; }
 .table-of-contents li { margin: .25rem 0; }
 .table-of-contents .depth-3 { padding-left: .7rem; }
 .table-of-contents a { text-decoration: none; }
-pre { max-width: 100%; overflow-x: auto; padding: 1rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--code-bg); }
-code:not(pre code) { padding: .1em .3em; border-radius: .25rem; background: var(--code-bg); }
+pre {
+  max-width: 100%;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--code-block-border);
+  border-radius: .65rem;
+  background: var(--code-block-bg) !important;
+  color: var(--code-block-fg);
+  box-shadow: 0 .4rem 1.2rem rgb(0 0 0 / .1), inset 0 1px rgb(255 255 255 / .04);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: .9rem;
+  line-height: 1.65;
+  scrollbar-color: #484f58 #161b22;
+  tab-size: 2;
+  white-space: pre !important;
+}
+pre code { font: inherit; }
+pre:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+pre::-webkit-scrollbar { height: .65rem; }
+pre::-webkit-scrollbar-track { background: #161b22; }
+pre::-webkit-scrollbar-thumb { border: 2px solid #161b22; border-radius: 999px; background: #484f58; }
+code:not(pre code) {
+  padding: .1em .3em;
+  border-radius: .25rem;
+  background: var(--code-bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: .92em;
+}
 a.wikilink { text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--link) 45%, transparent); }
 a.wikilink.broken { color: var(--broken); border-bottom: 1px dashed var(--broken); }
 .search-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 2rem; }
