@@ -19,5 +19,6 @@ const date = doc.updated ?? doc.created;
     {date && <time datetime={date.toISOString()}>{date.toISOString().slice(0, 10)}</time>}
   </div>
   <h2><a href={docUrl(doc, base)}>{doc.title}</a></h2>
+  {doc.description && <p class="doc-card-description">{doc.description}</p>}
   {doc.tags.length > 0 && <p class="card-tags">{doc.tags.map((tag) => `#${tag}`).join(' ')}</p>}
 </article>

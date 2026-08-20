@@ -7,6 +7,7 @@ export type DocMeta = {
   repo: string;
   slug: string;
   title: string;
+  description?: string;
   status: 'draft' | 'proposed' | 'accepted' | 'rejected' | 'superseded';
   tags: string[];
   authors: string[];
@@ -55,6 +56,7 @@ export const getDocs = async (): Promise<DocMeta[]> => {
       repo,
       slug,
       title: entry.data.title,
+      description: entry.data.description,
       status: entry.data.status,
       tags: entry.data.tags,
       authors: entry.data.authors,

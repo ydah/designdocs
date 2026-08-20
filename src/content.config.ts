@@ -13,6 +13,7 @@ const docs = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/docs' }),
   schema: z.object({
     title: z.string().min(1),
+    description: z.string().min(1).optional(),
     status: z.enum(STATUS).default('draft'),
     tags: z.array(normalizedTag).default([]),
     authors: z.array(z.string()).default([]),

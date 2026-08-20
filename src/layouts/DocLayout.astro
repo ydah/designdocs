@@ -18,7 +18,7 @@ interface Props {
 const { doc, headings, backlinks, supersededDoc } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const formatDate = (date?: Date) => date?.toISOString().slice(0, 10);
-const description = `${doc.repo} の設計ドキュメント「${doc.title}」`;
+const description = doc.description ?? `${doc.repo} の設計ドキュメント「${doc.title}」`;
 const ogImage = `${base}/og/${doc.id}.svg`;
 ---
 <Base title={doc.title} description={description} ogImage={ogImage}>

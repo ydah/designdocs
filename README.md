@@ -25,6 +25,7 @@ npm run build
 ```yaml
 ---
 title: PostgreSQL を主データストアとして採用する
+description: 採用理由、代替案、移行方針をまとめた設計判断
 status: accepted
 tags: [database, postgres, adr]
 authors: [ydah]
