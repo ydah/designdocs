@@ -5,7 +5,7 @@ description: PSLR(1) パーサ生成の構成、論文との差分、マージ�
 status: proposed
 tags: [lrama, pslr, parser-generator, lexer, language-composition]
 authors: [ydah]
-updated: 2026-09-05
+updated: 2026-09-06
 ---
 
 | 項目 | 内容 |
@@ -13,7 +13,7 @@ updated: 2026-09-05
 | 対象リポジトリ | [ruby/lrama](https://github.com/ruby/lrama) |
 | 対象実装 | [ruby/lrama#774 Add support PSLR(1) parser generation](https://github.com/ruby/lrama/pull/774) |
 | 調査時点 | 2026-08-20 |
-| PR スナップショット | open、15 commits、102 files、+13,397 / −545、branch `pslr_parser`、base `1e9294d` |
+| PR スナップショット | open、15 commits、102 files、+13,397 / −545、branch `pslr_parser`、base [`1e9294d`](https://github.com/ruby/lrama/commit/1e9294d017762b18327742ac9034411f7f0f1c7f) |
 | 基準文献 | Joel E. Denny, [*PSLR(1): Pseudo-Scannerless Minimal LR(1) for the Deterministic Parsing of Composite Languages*](https://open.clemson.edu/all_dissertations/519/), Ph.D. Dissertation, Clemson University, May 2010 |
 | 文書の目的 | 実装構造と論文との差分を整理し、マージ前の必須修正と段階的な改善方針を示す |
 | 検証範囲 | PR のソースコードと論文の静的読解。RSpec と生成 C コードのコンパイルは未実施 |

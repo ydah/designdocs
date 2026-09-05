@@ -6,7 +6,7 @@ status: proposed
 tags: [lrama, scoped-declarations, parser-generator, lexer, grammar]
 authors: [ydah]
 related: [0002-pslr-parser-generation, 0004-lex-directive]
-updated: 2026-09-05
+updated: 2026-09-06
 ---
 
 | 項目 | 内容 |
@@ -74,7 +74,7 @@ Denny 2010 §3.7、本文pp.77–79／添付PDF pp.84–86は、namespaceによ�
 
 本書で新たに定めるのは、公開構文、静的な継承、宣言種別ごとのshadowing、FOLLOWのscope所有、scope付きFIRST/closure、競合解決、保守的で実装可能な参照構築、診断・リソース制限・テストである。
 
-調査時のLramaはmaster `f58bbe406e660e2d7d2b77e827832754ccdea3c2`と、未mergeのPR #774 head `ab81b73f66abc605afeeea30d7842ef44aba3274`に固定した。PRには統合scannerの宣言を読む経路とscanner profileの構築がある。そこに存在する`%lexer-context`やcontext分類は、本書のscopeモデルの代替として使用しない。[L1][L2][L3]
+調査時のLramaはmaster [`f58bbe406e660e2d7d2b77e827832754ccdea3c2`](https://github.com/ruby/lrama/commit/f58bbe406e660e2d7d2b77e827832754ccdea3c2)と、未mergeのPR #774 head [`ab81b73f66abc605afeeea30d7842ef44aba3274`](https://github.com/ydah/lrama/commit/ab81b73f66abc605afeeea30d7842ef44aba3274)に固定した。PRには統合scannerの宣言を読む経路とscanner profileの構築がある。そこに存在する`%lexer-context`やcontext分類は、本書のscopeモデルの代替として使用しない。[L1][L2][L3]
 
 ## 3. 目的、非目的、対応範囲
 

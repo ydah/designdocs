@@ -6,7 +6,7 @@ status: proposed
 tags: [lrama, lex, parser-generator, lexer, language-composition]
 authors: [ydah]
 related: [0002-pslr-parser-generation, 0005-scoped-declarations]
-updated: 2026-09-05
+updated: 2026-09-06
 ---
 
 | 項目 | 内容 |
@@ -77,8 +77,8 @@ Denny 2010 §3.6、本文pp.75–76／添付PDF pp.82–83は、`%lex`、lexical
 
 調査対象を以下に固定する。
 
-- `ruby/lrama` master: `f58bbe406e660e2d7d2b77e827832754ccdea3c2`。
-- PR #774: 調査時点でopen・未merge。headは`ydah/lrama`の`ab81b73f66abc605afeeea30d7842ef44aba3274`。
+- `ruby/lrama` master: [`f58bbe406e660e2d7d2b77e827832754ccdea3c2`](https://github.com/ruby/lrama/commit/f58bbe406e660e2d7d2b77e827832754ccdea3c2)。
+- PR #774: 調査時点でopen・未merge。headは`ydah/lrama`の[`ab81b73f66abc605afeeea30d7842ef44aba3274`](https://github.com/ydah/lrama/commit/ab81b73f66abc605afeeea30d7842ef44aba3274)。
 
 masterの`parser.y`と、PR headの`parser.y`、`lib/lrama/states.rb`、`lib/lrama/state/scanner_accepts.rb`を確認した。PR側には、`%token-pattern`、`%token-action`、`%lex-prec`、`%lex-tie`、`%lex-no-tie`を読む経路がある。また、scanner構築、状態分割、scanner accepts構築の経路がある。`ScannerAccepts`は、通常行の未解決競合を宣言順で解決しない。一方、fallback行では宣言順を使う。[L1][L2][L3][L4]
 
