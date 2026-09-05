@@ -19,7 +19,7 @@ updated: 2026-09-05
 | 文書の目的 | 入れ子を含む字句構造を文法で定義し、親パーサーへ一つの合成トークンとして返す構文・生成方式・実行時契約を定義する |
 | 検証範囲 | Lrama と論文の静的調査に基づく設計。生成 C の実行、性能計測、完全なエラー回復は未検証 |
 
-Lrama に、入れ子の括弧、コメント、文字列内部の構造を通常の生成規則で定義する `%lex` を追加する提案である。字句非終端は独立したパーサープログラムとして生成し、親からは値・位置・入力範囲を持つ一つの合成トークンとして扱う。
+Lrama に、入れ子の括弧、コメント、文字列内部の構造を通常の生成規則で定義する `%lex` を追加する。字句非終端は独立したパーサープログラムとして生成し、親からは値・位置・入力範囲を持つ一つの合成トークンとして扱う。字句パーサーから別の字句パーサーも呼び出せる。
 
 ## 提案
 
@@ -38,7 +38,7 @@ Lrama に、入れ子の括弧、コメント、文字列内部の構造を通�
 
 ## 影響範囲
 
-変更対象は Lrama の文法ディレクティブ、program-local な文法 IR、scanner の配送 descriptor、生成 C の parser scheduler、意味値・位置・trivia の所有権、診断、resource 制限である。外部 lexer を使う既存文法、GLR、非同期入力、任意の自動修復は初版の対象外とする。
+変更対象は、Lrama の文法ディレクティブ、program-local な文法 IR、scanner の配送 descriptor、生成 C の parser scheduler、意味値・位置・trivia の所有権、診断、リソース制限である。外部 lexer を使う既存文法、GLR、非同期入力、任意の自動修復は初版の対象外とする。
 
 ## 検討した選択肢と採用しなかった理由
 
@@ -48,30 +48,22 @@ Lrama に、入れ子の括弧、コメント、文字列内部の構造を通�
 | 生成した `yyparse` を C の再帰呼出しで起動する | 不採用 | 入力 buffer、深さ制限、意味値 cleanup を複数の呼出しへ分散させる |
 | 複数の字句パーサーを試し、成功または最長の結果を採用する | 不採用 | 入力の巻戻しと action の再実行が必要になり、決定性を失う |
 | 終了トークンを shift せず EOF に置き換える | 不採用 | 終了記号の意味値・位置・destructor を通常規則と同じ契約で扱えない |
-| フレームスタックと `LOCAL_EOF` を使う | 採用 | 一つの scheduler で入力・所有権・resource 制限を管理できる |
+| フレームスタックと `LOCAL_EOF` を使う | 採用 | 一つの scheduler で入力・所有権・リソース制限を管理できる |
 
 ## この文書の読み方
 
 | 読者 | 最初に確認する節 |
 | --- | --- |
-| 提案をレビューする人 | 提案、判断理由、目的と非目的、互換性、完了条件 |
+| 提案をレビューする人 | 提案、判断理由、設計の不変条件、目的と非目的、互換性、完了条件 |
 | 文法の利用者 | 公開構文、意味モデル、詳細な使用例、エラー処理 |
 | 実装する人 | 生成パイプライン、実行時アーキテクチャ、所有権、実装分割 |
 | 検証する人 | 静的制約、fallback の決定性、テスト計画と受入条件 |
 
-## 1. 要旨
-
-`%lex L` は、`L` の文法を**親からは一つのトークンとして扱う**ための宣言である。入れ子の括弧、入れ子コメント、文字列内部の構造などを、手書きの深さカウンターではなく通常の生成規則で定義する。
-
-親のLRパーサーは`L`の内部トークンをshiftしない。入力上の開始トークンが選ばれると字句パーサーが起動し、終了トークンまでを解析して、意味値・位置・入力範囲を持つ一つの合成トークンを返す。字句パーサーから別の字句パーサーを呼ぶこともできる。
-
-中心となる不変条件は次の三つである。
+## 1. 設計の不変条件
 
 1. 入力の論理消費位置を更新する主体は常に一つであり、親と子が同じ字句を二重に消費しない。
 2. 子の終了は子自身の文法とフレームで判断し、親の次トークンを読んで終了を判定しない。
 3. 子の起動先は開始トークンの選択時に確定する。複数の子を試して、成功したものや最長のものを採用する機能にはしない。
-
-本書の「完全」は、以下に定める対応範囲について構文・意味・失敗時の挙動を規定することを指す。任意の文脈自由言語を字句として最長一致させる機能や、任意の不正入力からの回復は対象外である。
 
 ## 2. 出典、現状、提案の区別
 
@@ -88,7 +80,7 @@ Denny 2010 §3.6、本文pp.75–76／添付PDF pp.82–83は、`%lex`、lexical
 - `ruby/lrama` master: `f58bbe406e660e2d7d2b77e827832754ccdea3c2`。
 - PR #774: 調査時点でopen・未merge。headは`ydah/lrama`の`ab81b73f66abc605afeeea30d7842ef44aba3274`。
 
-masterの`parser.y`と、PR headの`parser.y`、`lib/lrama/states.rb`、`lib/lrama/state/scanner_accepts.rb`を確認した。PR側には`%token-pattern`、`%token-action`、`%lex-prec`、`%lex-tie`、`%lex-no-tie`を読む経路と、scanner構築・状態分割・scanner accepts構築の経路がある。`ScannerAccepts`は通常行の未解決競合を宣言順で解決しない一方、fallback行では宣言順を使う実装を含む。[L1][L2][L3][L4]
+masterの`parser.y`と、PR headの`parser.y`、`lib/lrama/states.rb`、`lib/lrama/state/scanner_accepts.rb`を確認した。PR側には、`%token-pattern`、`%token-action`、`%lex-prec`、`%lex-tie`、`%lex-no-tie`を読む経路がある。また、scanner構築、状態分割、scanner accepts構築の経路がある。`ScannerAccepts`は、通常行の未解決競合を宣言順で解決しない。一方、fallback行では宣言順を使う。[L1][L2][L3][L4]
 
 本書はその作業ブランチを統合候補とするが、masterにこれらがmerge済みとは仮定しない。公開構文、型、メソッド名のうち本書で新たに定めたものは、すべて提案である。
 
@@ -109,7 +101,7 @@ masterの`parser.y`と、PR headの`parser.y`、`lib/lrama/states.rb`、`lib/lra
 
 目的は、非正則な字句構造の宣言的な記述、親文法からの内部構造の隔離、正しい入れ子処理、意味値の一回だけの移譲、まとまった字句単位でのエラー報告、既存文法へのopt-in導入である。
 
-対象外は、GLR、バックトラッキング、複数の字句パーサーの並列試行、実行時に生成した終端文字列との照合、親のローカル変数表などによる字句規則の変更、scanner全体のUnicode化、非同期の入力中断・再開である。Rubyのheredocや全ての文字列構文をこの機能だけで置き換えることも本導入の完了条件に含めない。
+対象外は、任意の文脈自由言語を字句として最長一致させる機能、任意の不正入力からの回復、GLR、バックトラッキング、複数の字句パーサーの並列試行である。実行時に生成した終端文字列との照合、親のローカル変数表などによる字句規則の変更、scanner全体のUnicode化、非同期の入力中断・再開も対象外とする。Rubyのheredocや全ての文字列構文をこの機能だけで置き換えることも本導入の完了条件に含めない。
 
 ## 4. 公開構文
 
@@ -201,7 +193,7 @@ L → start-token middle* end-token
 
 終了記号が子のさらに内側の字句プログラムに現れることは問題ない。その記号は内側のフレームが所有する。同じ`}`を全フレームの終了として扱ってはならない。
 
-パターンの字句集合が重なる別tokenも検査する。IDが異なるだけでは字句競合は解決しない。通常行で一意の決定ができない重なりはgeneration errorとなる。
+パターンの字句集合が重なる別tokenも検査する。IDが異なるだけでは字句競合は解決しない。通常行で一意の決定ができない重なりは生成時エラーとなる。
 
 ### 5.3 複数alternativeと複数開始記号
 
@@ -332,7 +324,7 @@ struct yy_lex_frame {
 };
 ```
 
-sessionは入力buffer、論理cursor、位置情報、フレームstack、resource budgetを所有する。フレームは自分のLR stack・lookahead・layout蓄積を所有する。親は子の実行中、自分のlookahead slotを子の内部tokenに使わない。
+セッションは入力バッファ、論理カーソル、位置情報、フレームスタック、リソース予算を所有する。各フレームは、LRスタック、先読み、layoutの蓄積を所有する。子の実行中、親は自身の先読みスロットを子の内部トークンに使用しない。
 
 スタックの底はmain frameである。字句呼出しはフレームpush、完了はpopで実装する。生成された`yyparse`をCから再帰的に呼び出す実装にはしない。
 
@@ -475,7 +467,7 @@ LACとerror-repairの探索は、合成tokenを一つのterminalとして扱う�
 
 ### 10.1 actionの規則
 
-子の`$1`、`@1`、named referenceは子の規則内だけを参照する。親frameを参照する`$0`や負の番号は、字句program内ではgeneration errorとする。parse parameterは共有できるが、字句選択は実行途中の親actionが更新する可変状態に依存させない。
+子の`$1`、`@1`、named referenceは子の規則内だけを参照する。親frameを参照する`$0`や負の番号は、字句program内では生成時エラーとする。parse parameterは共有できるが、字句選択は実行途中の親actionが更新する可変状態に依存させない。
 
 開始・終了primitive tokenの`%token-action`は、tokenがcommitされる際にそれぞれ一回実行する。Lに対する値はLの根のactionが構築するため、`%token-action L`は拒否する。
 
@@ -488,7 +480,7 @@ LACとerror-repairの探索は、合成tokenを一つのterminalとして扱う�
 | `YYBACKUP`・入力巻戻し | 非対応。新ランタイムでは提供しない |
 | 直接の`yychar`改変 | サポートするAPIに含めない |
 
-`%initial-action`はsessionのmain開始時に一回だけ実行し、子frame開始時に再実行しない。既存の`%after-shift`、`%before-reduce`等のhookはmain programにのみ適用する。字句内部の計測には、program ID・frame depth・元のsymbol/rule ID・event種別を渡す新しいprogram-aware trace hookを使用する。既存hookに局所state番号を同じ形式で混入させない。
+`%initial-action`はsessionのmain開始時に一回だけ実行し、子frame開始時に再実行しない。既存の`%after-shift`、`%before-reduce`等のhookはmain programにのみ適用する。字句内部の計測には、新しいprogram-aware trace hookを使用する。このhookには、program ID、frame depth、元のsymbol/rule ID、event種別を渡す。既存hookに局所state番号を同じ形式で混入させない。
 
 任意のC actionの外部副作用をロールバックする仕組みは提供しない。値構築を主用途とし、親に採用された時だけ必要な外部副作用は親のactionへ置く。
 
@@ -506,7 +498,7 @@ LACとerror-repairの探索は、合成tokenを一つのterminalとして扱う�
 | frame abort | 所有中のstack値・lookahead値だけをdestroy |
 | allocation失敗 | それまでに所有している全frameの値を同じ手順でcleanup |
 
-`YYERROR`、`YYABORT`等をユーザーactionから直接呼んで離脱する場合、実行中のRHS値をaction側が管理する既存契約との整合を保つ。実行中のRHSをcleanup対象から除外する経路と、生成ランタイム自身のallocation失敗で所有中slotを全てcleanupする経路を区別する。ユーザーが管理するRHSを生成側が再びdestroyしてはならない。[B2]
+`YYERROR`、`YYABORT`等を利用者のactionから直接呼んで離脱する場合、実行中のRHS値をaction側が管理する既存契約との整合を保つ。実行中のRHSをcleanup対象から除外する経路と、生成ランタイム自身のallocation失敗で所有中slotを全てcleanupする経路を区別する。利用者が管理するRHSを生成側が再びdestroyしてはならない。[B2]
 
 ### 10.3 位置情報
 
@@ -582,7 +574,7 @@ block:
 
 明示的優先順位で一意になればその結果を使う。一意にならない場合はtoken宣言順では決めず、候補一覧を持つエラーとする。エラー範囲の提示には最長のmatched spanを使用できるが、それは「最長のtokenとして正常認識した」という意味ではない。
 
-旧来のscannerを使う文法とPR既存経路のfallbackを無断で変更しない。新しい統合ランタイムを有効にした文法だけの契約変更とする。[L4][F1]
+旧来のscannerを使う文法とPR既存経路のfallbackは変更対象に含めない。契約を変更するのは、新しい統合ランタイムを有効にした文法だけである。[L4][F1]
 
 ## 13. スコープ付き宣言との連携
 
@@ -592,7 +584,7 @@ block:
 
 子から戻す合成tokenのkind/value/spanは、scopeが変わっても再分類しない。スコープが複数候補として残り、同じ開始matchが異なる子environmentを要求する場合は、その差をdispatch conflictとして扱う。
 
-## 14. resource、性能、互換性
+## 14. リソース、性能、互換性
 
 ### 14.1 上限
 
@@ -687,9 +679,9 @@ error[LEX_AMBIGUOUS_ENTRY]: one start match selects two lexical parsers
   note: parser completion is not used to choose an entry
 ```
 
-generation errorは少なくとも、宣言位置、関係するRHS occurrence、program名、primitive token、delivery、反例prefixを含める。入力prefixの表示は制御byteをescapeし、長さ制限を設ける。
+生成時エラーは少なくとも、宣言位置、関係するRHS occurrence、program名、primitive token、delivery、反例prefixを含める。入力prefixの表示は制御byteをescapeし、長さ制限を設ける。
 
-runtime errorは最内frameの問題位置と、開いている領域の開始位置を表示する。深いnestingでは全frameを無制限に表示せず、先頭・末尾と省略数を示す。
+実行時エラーは最内frameの問題位置と、開いている領域の開始位置を表示する。深いnestingでは全frameを無制限に表示せず、先頭・末尾と省略数を示す。
 
 ## 17. テスト計画と受入条件
 
@@ -705,8 +697,8 @@ runtime errorは最内frameの問題位置と、開いている領域の開始�
 | 改行保存 | quoted内の空白 | 親のlayout設定で消えない |
 | 実EOF | `{a` | `LEX_UNTERMINATED`。成功tokenを返さない |
 | 空入力 | EOF | 子を起動しない |
-| dispatch競合 | 同一開始で異なる二根 | generation error |
-| 再帰の停止 | 非生産的字句根 | generation error |
+| dispatch競合 | 同一開始で異なる二根 | 生成時エラー |
+| 再帰の停止 | 非生産的字句根 | 生成時エラー |
 | 親で不正 | fallbackから正しく閉じたblock | block全体をunexpectedとして報告 |
 | fallback曖昧 | 同順位の異なる二根 | どちらのactionも実行せずエラー |
 | local回復 | OPEN error CLOSE | taintedな閉領域を親error経路へ返す |
@@ -726,7 +718,7 @@ runtime errorは最内frameの問題位置と、開いている領域の開始�
 
 ### 17.3 完了条件
 
-文法検証、全error code、二重consume防止、子の局所EOF、layout、resource cleanup、scopeとの連携、生成Cのsanitizer試験が揃うまで実験的機能とする。テストの実施結果と性能値は実装PRで追記する。本書作成時点でこれらの試験を実行済みとはしない。
+文法検証、全error code、二重consume防止、子の局所EOF、layout、resource cleanup、scopeとの連携、生成Cのsanitizer試験が揃うまで実験的機能とする。テストの実施結果と性能値は実装PRで追記する。
 
 ## 18. 実装分割
 

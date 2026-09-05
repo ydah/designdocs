@@ -27,18 +27,18 @@ Lrama に、共有する文法を部分言語ごとに再利用しながら、�
 - 継承は静的に解決し、同じ意味の環境を有限な `EnvId` として intern する。実行時の可変 scope stack は追加しない。
 - item には規則本体の環境を、lookahead には `(TokenId, ScanEnvId)` を保持し、入口非終端の FOLLOW を呼出し元の環境で読む。
 - scope-aware canonical 構築を意味の参照実装とし、その結果へ保守的な状態同値化を適用する。
-- 同じ左文脈に残る環境が異なる parser action、scanner winner、layout、CALL 先を要求する場合は generation error にする。
+- 同じ左文脈に残る環境が異なる parser action、scanner winner、layout、CALL 先を要求する場合は生成時エラーにする。
 - scope を使わない文法は `GLOBAL` のみとして既存経路を維持する。
 
 ## 判断理由
 
 `>` と `>>` のような字句判断や構文優先順位は、同じ共有非終端でも部分言語によって変わる。宣言の適用範囲を symbol 全体ではなく RHS 上の出現位置に結び付けることで、利用側が必要な範囲だけを明示できる。
 
-scope の情報を単一の実行時変数や LR item の一つの field に集約すると、nullable な入口や reduce に必要な caller 側 lookahead の環境を失う。規則 instance、非終端 instance、tagged lookahead を分け、scope-aware canonical 構築を基準にすることで、状態 merge の前に意味を固定する。
+scopeの情報を単一の実行時変数やLR itemの一つのfieldに集約すると、nullableな入口で環境を失う。reduceに必要なcaller側lookaheadの環境も失う。そこで規則instance、非終端instance、tagged lookaheadを分け、scope-aware canonical構築によって状態merge前に意味を固定する。
 
 ## 影響範囲
 
-変更対象は文法 parser、宣言 resolver、parameterized rule と inline の source mapping、FIRST・closure・goto、parser conflict、scanner profile、layout、fallback、LAC、report、resource 制限である。token ID、pattern、意味 action、destructor は global のまま維持し、scope を使わない既存文法と外部 lexer の ABI は変更しない。
+変更対象は、文法parser、宣言resolver、parameterized ruleとinlineのsource mapping、FIRST・closure・goto、parser conflict、scanner profile、layout、fallback、LAC、レポート、リソース制限である。一方、token ID、pattern、意味action、destructorはglobalのまま維持する。scopeを使わない既存文法と外部lexerのABIも変更しない。
 
 ## 検討した選択肢と採用しなかった理由
 
@@ -55,20 +55,16 @@ scope の情報を単一の実行時変数や LR item の一つの field に集�
 
 | 読者 | 最初に確認する節 |
 | --- | --- |
-| 提案をレビューする人 | 提案、判断理由、目的・非目的、生成アルゴリズム、完了条件 |
+| 提案をレビューする人 | 提案、判断理由、適用モデル、目的・非目的、生成アルゴリズム、完了条件 |
 | 文法の利用者 | 公開構文、継承の意味、宣言種別ごとの規則、動作例 |
 | 実装する人 | 中間表現、scope-aware FIRST・closure・goto、scanner profile、実装分割 |
-| 検証する人 | 構文競合と scope 競合、resource 制限、検証計画 |
+| 検証する人 | 構文競合と scope 競合、リソース制限、検証計画 |
 
-## 1. 要旨
-
-スコープ付き宣言は、同じ文法を複数の部分言語から再利用しながら、字句優先順位、lexical tie、layout、構文優先順位の適用範囲を分ける機能である。
+## 1. 適用モデル
 
 例えば`>>`を通常の式では右shiftとして認識し、template引数では二つの`>`として扱い、その内部の括弧付き式では再び右shiftとして認識する。この違いを、利用者がlexerの状態変数やscope stackを更新するactionを書かずに指定できるようにする。
 
-本設計は、スコープを「ソースファイルの宣言ブロック」や「lexerのstart condition」と同一視しない。**文法上の特定の非終端出現から導出される範囲に、名前付き宣言環境を適用する**。
-
-同時に複数の導出候補が存在して宣言が食い違う場合は、深いscope、先に書かれたscope、最後に見たscopeを選ばない。左文脈によって区別できるものは状態で区別し、それでも残る矛盾はgeneration errorにする。
+スコープは、ソースファイルの宣言ブロックやlexerのstart conditionではない。文法上の特定の非終端出現から導出される範囲に、名前付き宣言環境を適用する。
 
 ## 2. 出典と設計の位置付け
 
@@ -76,7 +72,7 @@ Denny 2010 §3.7、本文pp.77–79／添付PDF pp.84–86は、namespaceによ�
 
 同論文は、通常のcanonical LRがscopeを記録しないため、scope対応によってcanonical LRの状態でさえさらに分割し得ると指摘している。本書でも、未注釈のcanonical LRとの一致を最終的な意味の保証にしない。[D1 §3.7]
 
-本書で新たに定めるのは、公開構文、静的な継承、宣言種別ごとのshadowing、FOLLOWのscope所有、scope付きFIRST/closure、競合解決、保守的で実装可能な参照構築、診断・resource制限・テストである。
+本書で新たに定めるのは、公開構文、静的な継承、宣言種別ごとのshadowing、FOLLOWのscope所有、scope付きFIRST/closure、競合解決、保守的で実装可能な参照構築、診断・リソース制限・テストである。
 
 調査時のLramaはmaster `f58bbe406e660e2d7d2b77e827832754ccdea3c2`と、未mergeのPR #774 head `ab81b73f66abc605afeeea30d7842ef44aba3274`に固定した。PRには統合scannerの宣言を読む経路とscanner profileの構築がある。そこに存在する`%lexer-context`やcontext分類は、本書のscopeモデルの代替として使用しない。[L1][L2][L3]
 
@@ -158,7 +154,7 @@ parenthesized_contents %scope HOST:
   > 呼出し元規則が現在持つ環境
 ```
 
-RHS指定とheader指定が異なってもエラーではなく、RHS指定が優先する。reportにはoverrideを表示する。
+RHS指定とheader指定が異なってもエラーではなく、RHS指定が優先する。レポートにはoverrideを表示する。
 
 ### 4.4 scopeは名前解決のnamespaceではない
 
@@ -258,7 +254,7 @@ INNERではidentityはKEYWORD優先のまま、lengthはshortestとなる。こ�
 
 同じ段階・同じspecificityの宣言が同じ値を与えるなら重複警告だけを出す。異なる値なら矛盾としてエラーにする。symbol-setの定義順や要素の列挙順は優先順位にならない。
 
-子のgeneric宣言は親のspecific宣言をoverrideできる。これは「子scopeの明示的な方針を優先する」という本設計の選択であり、reportでどの宣言をshadowしたかを確認できるようにする。
+子のgeneric宣言は親のspecific宣言をoverrideできる。これは「子scopeの明示的な方針を優先する」という本設計の選択であり、レポートでどの宣言をshadowしたかを確認できるようにする。
 
 ### 6.3 推移性と完全競合
 
@@ -617,7 +613,7 @@ scannerの同値性は「現在のaccepting stateで返すtoken」だけで判�
 
 この同値化は最小状態数を保証するアルゴリズムではない。特にerror behaviorまで一致させるため、通常IELRより多い状態が残り得る。
 
-## 13. IELRへの効率化経路
+## 13. 将来の最適化: IELRへの効率化経路
 
 参照構築は機能の意味とテストoracleである。大規模文法への実用化のために、canonical全体を作らずにscope-aware状態を直接構築する最適化を別PRで追加できる。
 
@@ -638,13 +634,13 @@ PR #774の`States`には、scannerを構築してからstateをsplitし、その
 
 V1の公開機能にこの最適化を必須とはしない。実装されていない最適化を、通常IELRへ設定を戻すことで代用しない。
 
-## 14. 実行時、LAC、error recovery
+## 14. 実行時、LAC、エラー回復
 
 ### 14.1 外部lexerとの関係
 
 構文優先順位だけをscope化する文法は、既存の外部lexerを使用できる。lexical precedence、tie、layoutをscope化する場合は統合scannerを必須とする。外部lexerが同じ宣言環境を実装しているはずだという仮定を置かない。
 
-runtimeで利用者がscope stackをpush/popするAPIは追加しない。生成stateとscanner profileが必要な文法環境を表す。
+実行時に利用者がscope stackをpush/popするAPIは追加しない。生成stateとscanner profileが必要な文法環境を表す。
 
 ### 14.2 default reduction
 
@@ -734,7 +730,7 @@ Y<X<6>>;
   NAME '<' NAME '<' NUMBER '>' '>' ';' EOF
 ```
 
-重要なのは、TEMPLATEの指定をexpressionだけでなく`template_tail`に付け、閉じ`>`もTEMPLATEでscanすることである。括弧付き式の`paren_tail`はHOSTを明示的に選択するため、その内部ではRSHIFTが使える。
+`template_tail`にTEMPLATEを指定すると、閉じ`>`もTEMPLATEでscanされる。括弧付き式の`paren_tail`はHOSTを明示的に選択するため、その内部ではRSHIFTを使用できる。
 
 `%lex-no-tie`はこの例で`>`とRSHIFTを常に一緒に候補へ追加しないことを表す。どちらも候補になる箇所の解決は、各scopeの`%lex-prec`が行う。
 
@@ -748,7 +744,7 @@ Y<X<6>>;
 
 ### 16.2 inline
 
-inline展開によってscope付き非終端の境界を取り除いてしまう場合は、内部の各出現に同じ環境情報を残す。保存を実装できていない組合せはgeneration errorにする。
+inline展開によってscope付き非終端の境界を取り除いてしまう場合は、内部の各出現に同じ環境情報を残す。保存を実装できていない組合せは生成時エラーにする。
 
 単に元のRHS記号列だけをコピーする実装は不可である。scope境界を含むwrapperを生成してよいが、そのwrapperの存在でuser actionの`$n`やnamed referenceをずらさないsource mappingを用意する。
 
@@ -756,7 +752,7 @@ inline展開によってscope付き非終端の境界を取り除いてしまう
 
 midrule actionから生成するε非終端は、そのactionがあるsource位置のbody環境を持つ。これをscopeへのenter/exitのためには使用しない。
 
-actionが実行される前にlookaheadが取得され得るため、actionが可変scopeを更新する設計にはしない。生成されるhidden symbolにも元のscope・locationをreportできるようにする。
+actionが実行される前にlookaheadが取得され得るため、actionが可変scopeを更新する設計にはしない。生成されるhidden symbolにも元のscope・locationをレポートできるようにする。
 
 ## 17. `%lex`との組合せ
 
@@ -777,7 +773,7 @@ statement:
 
 子の終了tokenをshiftした後の`LOCAL_EOF`はscannerが認識する入力tokenではない。そのsentinelのためにcallerのfallbackやlayoutを実行しない。合成tokenを返した後は、保存されている親stateから再開する。
 
-## 18. 診断とreport
+## 18. 診断とレポート
 
 ### 18.1 declaration contradiction
 
@@ -806,7 +802,7 @@ error[SCOPE_LEXICAL_CONFLICT]: lexical decision differs by active scope
 
 「文法が曖昧」と一律に説明せず、同じ左文脈でどの二つの宣言が必要になったかを示す。必要ならscope範囲をdelimiter込みのhelperへ移す修正例を表示する。
 
-### 18.3 merge report
+### 18.3 マージレポート
 
 ```text
 merge rejected:
@@ -816,9 +812,9 @@ merge rejected:
   distinguishing input prefix: ">>"
 ```
 
-scope-aware canonicalに残る競合と、最適化mergeを拒否すれば消える問題は別のreport項目にする。
+scope-aware canonicalに残る競合と、最適化mergeを拒否すれば消える問題は別のレポート項目にする。
 
-### 18.4 機械可読report
+### 18.4 機械可読レポート
 
 新しい`--report=scopes,scanner-profiles`を提案する。JSON版にはschema versionを付け、少なくとも以下を出す。
 
@@ -833,9 +829,9 @@ layout membership disagreements
 fallback universe / decision disagreements
 ```
 
-同じ入力文法・設定に対して、Hashの走査順やprocess seedでreport順序・state番号が変わらないよう、symbol・environment・transitionを安定順で列挙する。
+同じ入力文法・設定に対して、Hashの走査順やprocess seedでレポート順序・state番号が変わらないよう、symbol・environment・transitionを安定順で列挙する。
 
-## 19. resource制限と安全性
+## 19. リソース制限と安全性
 
 初期の既定値案を以下に示す。これらは実測による推奨値ではなく、無制限の生成を避けるための運用上限である。
 
@@ -885,7 +881,7 @@ V1ではglobalな異なるtoken IDとpatternを定義し、それらの優先順
 |---|---|
 | forward scope reference | 定義順に依存せず解決する |
 | 継承cycle | 関係するscope列と宣言位置を報告 |
-| 同じcomponentの矛盾 | 同specificityならgeneration error |
+| 同じcomponentの矛盾 | 同specificityなら生成時エラー |
 | identity/lengthの別override | 片方だけ変更し、他方は継承 |
 | tieのclosure | 反射・対称・推移を満たす |
 | no-tieと間接path | closure後の矛盾を検出 |
@@ -894,7 +890,7 @@ V1ではglobalな異なるtoken IDとpatternを定義し、それらの優先順
 | 禁止した宣言 | scope内のpattern/type/actionを位置付きで拒否 |
 | 同義environment | 意味を共有し、診断用の名前は失わない |
 
-### 21.2 構築・runtime試験
+### 21.2 構築・実行時試験
 
 | ケース | 期待する結果 |
 |---|---|
@@ -923,7 +919,7 @@ V1ではglobalな異なるtoken IDとpatternを定義し、それらの優先順
 
 scope名のalpha-renaming、scope定義順の変更、無関係なscopeの追加は意味を変えないというmetamorphic testを行う。`%left`の行順の変更は意味を変えるので、この不変性試験の対象にしない。
 
-### 21.4 本書作成時に確認した範囲
+### 21.4 補助モデルで確認した範囲
 
 §15の小さい文法について、tagged FIRST・closure・gotoと先読み固定を実装した補助Pythonモデルで、掲載した三つの入力が期待するtoken列になることを確認した。このモデルのcanonical state数は43だった。
 
@@ -944,9 +940,9 @@ scope名のalpha-renaming、scope定義順の変更、無関係なscopeの追加
 
 新規クラス候補は`Grammar::ScopeDefinition`、`Grammar::DeclarationEnvironment`、`Grammar::SymbolOccurrence`、`Grammar::RuleInstance`とする。既存の`State::Item`、`States`、`State::ScannerAccepts`に対応関係を接続し、reportにも同じIRを使う。
 
-公開可能とする条件は、V1の対応宣言が全て実装されていること、禁止組合せを拒否すること、参照構築と生成Cの差分試験、scopeなしの互換性試験、resource failure試験が揃うことである。効率的なIELR直接構築の有無とは切り離す。
+公開可能とする条件は、V1の対応宣言の実装、禁止組合せの拒否、参照構築と生成Cの差分試験、scopeなしの互換性試験、resource failure試験である。加えて、lookaheadの環境、layoutの非消費遷移、CALL先、エラー時のtoken固定が保存される必要がある。効率的なIELR直接構築は条件に含めない。
 
-「scope IDをstateに付けた」「templateの一例が通った」だけでは完了としない。**lookaheadの環境、layoutの非消費遷移、CALL先、エラー時のtoken固定まで保存されること**を機能の完了条件とする。
+`scope IDをstateに付けた`、または`templateの一例が通った`だけでは完了としない。
 
 ## 23. 参考資料
 
