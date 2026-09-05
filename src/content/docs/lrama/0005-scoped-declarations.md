@@ -1,23 +1,64 @@
 ---
 created: 2026-09-05
 title: Lrama にスコープ付き宣言を導入する
-description: 文法上の非終端出現を入口として、字句・構文宣言の有限な環境を適用する機能の設計
-status: draft
+description: 文法上の非終端出現を入口として、字句・構文宣言の有限な環境を適用する機能の設計提案
+status: proposed
 tags: [lrama, scoped-declarations, parser-generator, lexer, grammar]
 authors: [ydah]
-related: [0004-lex-directive]
+related: [0002-pslr-parser-generation, 0004-lex-directive]
 updated: 2026-09-05
 ---
 
 | 項目 | 内容 |
-|---|---|
-| Status | Proposed / 実装レビュー用の設計案 |
-| Date | 2026-09-05 |
-| Target | Lramaの文法、LR構築、統合scanner |
-| Related | [[0004-lex-directive]] |
-| 主な判断 | RHS上の非終端の出現位置を入口とし、有限の宣言環境をLR itemとlookaheadに保持する |
-| 意味の基準 | scope-aware canonical構築。通常のcanonical LRだけを正解判定には使わない |
-| 初期生成方式 | 参照構築と保守的な状態同値化。効率的なIELR直接構築は互換な最適化として分離する |
+| --- | --- |
+| 対象リポジトリ | [ruby/lrama](https://github.com/ruby/lrama) |
+| 基準リビジョン | master [`f58bbe4`](https://github.com/ruby/lrama/commit/f58bbe406e660e2d7d2b77e827832754ccdea3c2) と PR #774 head [`ab81b73`](https://github.com/ydah/lrama/commit/ab81b73f66abc605afeeea30d7842ef44aba3274) |
+| 調査時点 | 2026-09-05 |
+| 実装状態 | 未実装の設計提案。PR #774 の統合 scanner と状態分割を接続候補とする |
+| 関連設計 | [[0002-pslr-parser-generation]]、[[0004-lex-directive]] |
+| 文書の目的 | 非終端の出現位置ごとに字句・構文宣言を切り替える構文、意味モデル、生成方式、競合検出を定義する |
+| 検証範囲 | Lrama と論文の静的調査、および小規模な補助モデルによる token 列の確認。Lrama 本体と生成 C では未検証 |
+
+Lrama に、共有する文法を部分言語ごとに再利用しながら、字句優先順位、lexical tie、layout、構文優先順位の適用範囲を分けるスコープ付き宣言を追加する提案である。スコープは文法上の非終端の出現位置から始まる有限な宣言環境として扱う。
+
+## 提案
+
+- `%scope` で名前付きの宣言環境を定義し、`%with-scope` で RHS 上の一つの非終端出現へ適用する。
+- 継承は静的に解決し、同じ意味の環境を有限な `EnvId` として intern する。実行時の可変 scope stack は追加しない。
+- item には規則本体の環境を、lookahead には `(TokenId, ScanEnvId)` を保持し、入口非終端の FOLLOW を呼出し元の環境で読む。
+- scope-aware canonical 構築を意味の参照実装とし、その結果へ保守的な状態同値化を適用する。
+- 同じ左文脈に残る環境が異なる parser action、scanner winner、layout、CALL 先を要求する場合は generation error にする。
+- scope を使わない文法は `GLOBAL` のみとして既存経路を維持する。
+
+## 判断理由
+
+`>` と `>>` のような字句判断や構文優先順位は、同じ共有非終端でも部分言語によって変わる。宣言の適用範囲を symbol 全体ではなく RHS 上の出現位置に結び付けることで、利用側が必要な範囲だけを明示できる。
+
+scope の情報を単一の実行時変数や LR item の一つの field に集約すると、nullable な入口や reduce に必要な caller 側 lookahead の環境を失う。規則 instance、非終端 instance、tagged lookahead を分け、scope-aware canonical 構築を基準にすることで、状態 merge の前に意味を固定する。
+
+## 影響範囲
+
+変更対象は文法 parser、宣言 resolver、parameterized rule と inline の source mapping、FIRST・closure・goto、parser conflict、scanner profile、layout、fallback、LAC、report、resource 制限である。token ID、pattern、意味 action、destructor は global のまま維持し、scope を使わない既存文法と外部 lexer の ABI は変更しない。
+
+## 検討した選択肢と採用しなかった理由
+
+| 選択肢 | 判断 | 理由 |
+| --- | --- | --- |
+| action で実行時の scope stack を push / pop する | 不採用 | lookahead 取得と action 実行の順序に依存し、LAC や error recovery で復元が難しい |
+| 非終端 symbol の全出現へ同じ scope を適用する | 不採用 | 共有非終端を異なる部分言語から再利用できない |
+| 通常の canonical LR 状態へ scope ID だけを追加する | 不採用 | 規則本体と caller の lookahead が異なる環境を持つ場合を表せない |
+| 呼出し元の環境へ動的に宣言を重ねる | 不採用 | 呼出し経路ごとに環境が増え、同じ名前の scope の意味が一定にならない |
+| token pattern と意味 action も scope 化する | 初版では不採用 | 同じ TokenId の字句集合・配送結果が環境ごとに変わり、parser 側の絞り込みまで再設計が必要になる |
+| scope-aware canonical 構築と保守的な状態同値化 | 採用 | 意味を明示した参照構築を oracle として、最適化を独立して検証できる |
+
+## この文書の読み方
+
+| 読者 | 最初に確認する節 |
+| --- | --- |
+| 提案をレビューする人 | 提案、判断理由、目的・非目的、生成アルゴリズム、完了条件 |
+| 文法の利用者 | 公開構文、継承の意味、宣言種別ごとの規則、動作例 |
+| 実装する人 | 中間表現、scope-aware FIRST・closure・goto、scanner profile、実装分割 |
+| 検証する人 | 構文競合と scope 競合、resource 制限、検証計画 |
 
 ## 1. 要旨
 
@@ -909,22 +950,22 @@ scope名のalpha-renaming、scope定義順の変更、無関係なscopeの追加
 
 ## 23. 参考資料
 
-[D1] Joel E. Denny, *PSLR(1): Pseudo-Scannerless Minimal LR(1) for the Deterministic Parsing of Composite Languages*, 2010。§3.7、本文pp.77–79／添付PDF pp.84–86。Figure 2.6は本文p.21／PDF p.28。lexical precedenceは§3.2、tiesは§3.3。公開版: `https://open.clemson.edu/cgi/viewcontent.cgi?article=1519&context=all_dissertations`
+[D1] Joel E. Denny, [*PSLR(1): Pseudo-Scannerless Minimal LR(1) for the Deterministic Parsing of Composite Languages*](https://open.clemson.edu/cgi/viewcontent.cgi?article=1519&context=all_dissertations), 2010。§3.7、本文pp.77–79／添付PDF pp.84–86。Figure 2.6は本文p.21／PDF p.28。lexical precedenceは§3.2、tiesは§3.3。
 
-[L1] Lrama masterの入力文法。`https://github.com/ruby/lrama/blob/f58bbe406e660e2d7d2b77e827832754ccdea3c2/parser.y`
+[L1] Lrama masterの[入力文法](https://github.com/ruby/lrama/blob/f58bbe406e660e2d7d2b77e827832754ccdea3c2/parser.y)。
 
-[L2] PR #774 headの入力文法。`https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/parser.y`
+[L2] PR #774 headの[入力文法](https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/parser.y)。
 
-[L3] 同headの生成・分割・再計算経路。`https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/lib/lrama/states.rb`
+[L3] 同headの[生成・分割・再計算経路](https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/lib/lrama/states.rb)。
 
-[L4] 同headのscanner conflict profileとfallback。`https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/lib/lrama/state/scanner_accepts.rb`
+[L4] 同headの[scanner conflict profileとfallback](https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/lib/lrama/state/scanner_accepts.rb)。
 
-[B1] GNU Bison Manual, §5.8.3 LAC。`https://www.gnu.org/software/bison/manual/html_node/LAC.html`
+[B1] GNU Bison Manual, [§5.8.3 LAC](https://www.gnu.org/software/bison/manual/html_node/LAC.html)。
 
-[B2] GNU Bison Manual, §3.7.7 Freeing Discarded Symbols。意味値破棄をscope-dependentな実行時選択にしない設計上の比較対象。`https://www.gnu.org/software/bison/manual/html_node/Destructor-Decl.html`
+[B2] GNU Bison Manual, [§3.7.7 Freeing Discarded Symbols](https://www.gnu.org/software/bison/manual/html_node/Destructor-Decl.html)。意味値破棄をscope-dependentな実行時選択にしない設計上の比較対象。
 
-[F1] Flex Manual, §10 Start Conditions。手動のBEGIN／start-condition stackとの比較対象。`https://westes.github.io/flex/manual/Start-Conditions.html`
+[F1] Flex Manual, [§10 Start Conditions](https://westes.github.io/flex/manual/Start-Conditions.html)。手動のBEGIN／start-condition stackとの比較対象。
 
-[C1] Daveed Vandevoorde, N1757 / 05-0017, *Right Angle Brackets*, 2005-01-14。歴史的提案であり、現代C++全体の規範文書としては使用しない。`https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2005/n1757.html`
+[C1] Daveed Vandevoorde, N1757 / 05-0017, [*Right Angle Brackets*](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2005/n1757.html), 2005-01-14。歴史的提案であり、現代C++全体の規範文書としては使用しない。
 
-[P1] 保存済み設計`lrama_pslr_design(1).md`、2026-07-05、§5.7など。過去の構文案・導入方針の比較にのみ使用し、現在のコードの実装状態は[L1]–[L4]で区別した。
+[P1] [[0002-pslr-parser-generation|Lrama に PSLR(1) パーサ生成を導入する]]。過去の構文案・導入方針の比較にのみ使用し、現在のコードの実装状態は[L1]–[L4]で区別した。

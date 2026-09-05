@@ -1,22 +1,63 @@
 ---
 created: 2026-09-05
 title: Lrama に `%lex` による字句構造を導入する
-description: 字句非終端ごとに独立したパーサープログラムを生成し、入れ子の字句構造を一つの合成トークンとして扱う機能の設計
-status: draft
+description: 字句非終端ごとに独立したパーサープログラムを生成し、入れ子の字句構造を一つの合成トークンとして扱う機能の設計提案
+status: proposed
 tags: [lrama, lex, parser-generator, lexer, language-composition]
 authors: [ydah]
-related: [0005-scoped-declarations]
+related: [0002-pslr-parser-generation, 0005-scoped-declarations]
 updated: 2026-09-05
 ---
 
 | 項目 | 内容 |
-|---|---|
-| Status | Proposed / 実装レビュー用の設計案 |
-| Date | 2026-09-05 |
-| Target | Lramaの決定的Cパーサー生成 |
-| Related | [[0005-scoped-declarations]] |
-| 主な判断 | 字句非終端ごとに独立したパーサープログラムを生成し、共有入力上のフレームスタックで実行する |
-| 非保証 | 現行Lramaでの動作、生成Cのテスト成功、実測性能、最小状態数を保証した設計ではない |
+| --- | --- |
+| 対象リポジトリ | [ruby/lrama](https://github.com/ruby/lrama) |
+| 基準リビジョン | master [`f58bbe4`](https://github.com/ruby/lrama/commit/f58bbe406e660e2d7d2b77e827832754ccdea3c2) と PR #774 head [`ab81b73`](https://github.com/ydah/lrama/commit/ab81b73f66abc605afeeea30d7842ef44aba3274) |
+| 調査時点 | 2026-09-05 |
+| 実装状態 | 未実装の設計提案。PR #774 の統合 scanner を実装候補の基盤とする |
+| 関連設計 | [[0002-pslr-parser-generation]]、[[0005-scoped-declarations]] |
+| 文書の目的 | 入れ子を含む字句構造を文法で定義し、親パーサーへ一つの合成トークンとして返す構文・生成方式・実行時契約を定義する |
+| 検証範囲 | Lrama と論文の静的調査に基づく設計。生成 C の実行、性能計測、完全なエラー回復は未検証 |
+
+Lrama に、入れ子の括弧、コメント、文字列内部の構造を通常の生成規則で定義する `%lex` を追加する提案である。字句非終端は独立したパーサープログラムとして生成し、親からは値・位置・入力範囲を持つ一つの合成トークンとして扱う。
+
+## 提案
+
+- `%lex L` で字句非終端を宣言し、開始・内部・終了トークンからなる文法を独立した lexical program へ分割する。
+- 親と子は一つの入力 cursor を共有し、heap 上のフレームスタックで実行する。生成された `yyparse` の再帰呼出しは使わない。
+- 子は終了トークンを通常どおり shift した後、入力を消費しない `LOCAL_EOF` で根を reduce して完了する。
+- 開始トークンを選んだ時点で呼出し先を確定し、失敗時のバックトラックや複数の子の並列試行は行わない。
+- 意味値、位置、trivia、buffer の所有権をフレーム単位で管理し、親子での二重消費・二重破棄を禁止する。
+- `%lex` を使わない文法は従来経路を維持し、初版では統合 scanner を必須とする。
+
+## 判断理由
+
+入れ子を持つ字句構造は正規表現や単純な最長一致だけでは表しにくく、手書きの深さカウンターや lexer mode に処理が分散しやすい。字句領域を小さな LR パーサーとして生成すれば、通常の文法規則、意味 action、位置情報を再利用しながら、内部構造を親文法から隔離できる。
+
+一方、子が親の入力を先読みしたり、複数候補を試したりすると、入力消費と action の実行回数が不定になる。共有 cursor、起動時の一意な dispatch、フレーム固有の `LOCAL_EOF` を不変条件にすることで、決定性と所有権を明示する。
+
+## 影響範囲
+
+変更対象は Lrama の文法ディレクティブ、program-local な文法 IR、scanner の配送 descriptor、生成 C の parser scheduler、意味値・位置・trivia の所有権、診断、resource 制限である。外部 lexer を使う既存文法、GLR、非同期入力、任意の自動修復は初版の対象外とする。
+
+## 検討した選択肢と採用しなかった理由
+
+| 選択肢 | 判断 | 理由 |
+| --- | --- | --- |
+| 親パーサーが字句領域の内部トークンも直接処理する | 不採用 | 内部構造が親の状態・先読み・エラー回復へ漏れ、一つの字句単位として扱えない |
+| 生成した `yyparse` を C の再帰呼出しで起動する | 不採用 | 入力 buffer、深さ制限、意味値 cleanup を複数の呼出しへ分散させる |
+| 複数の字句パーサーを試し、成功または最長の結果を採用する | 不採用 | 入力の巻戻しと action の再実行が必要になり、決定性を失う |
+| 終了トークンを shift せず EOF に置き換える | 不採用 | 終了記号の意味値・位置・destructor を通常規則と同じ契約で扱えない |
+| フレームスタックと `LOCAL_EOF` を使う | 採用 | 一つの scheduler で入力・所有権・resource 制限を管理できる |
+
+## この文書の読み方
+
+| 読者 | 最初に確認する節 |
+| --- | --- |
+| 提案をレビューする人 | 提案、判断理由、目的と非目的、互換性、完了条件 |
+| 文法の利用者 | 公開構文、意味モデル、詳細な使用例、エラー処理 |
+| 実装する人 | 生成パイプライン、実行時アーキテクチャ、所有権、実装分割 |
+| 検証する人 | 静的制約、fallback の決定性、テスト計画と受入条件 |
 
 ## 1. 要旨
 
@@ -705,20 +746,20 @@ runtime errorは最内frameの問題位置と、開いている領域の開始�
 
 ## 19. 参考資料
 
-[D1] Joel E. Denny, *PSLR(1): Pseudo-Scannerless Minimal LR(1) for the Deterministic Parsing of Composite Languages*, 2010。主に§3.2.7、§3.5、§3.6。添付PDFの本文pp.75–76はPDF pp.82–83。公開版: `https://open.clemson.edu/cgi/viewcontent.cgi?article=1519&context=all_dissertations`
+[D1] Joel E. Denny, [*PSLR(1): Pseudo-Scannerless Minimal LR(1) for the Deterministic Parsing of Composite Languages*](https://open.clemson.edu/cgi/viewcontent.cgi?article=1519&context=all_dissertations), 2010。主に§3.2.7、§3.5、§3.6。添付PDFの本文pp.75–76はPDF pp.82–83。
 
-[L1] Lrama masterの入力文法。`https://github.com/ruby/lrama/blob/f58bbe406e660e2d7d2b77e827832754ccdea3c2/parser.y`
+[L1] Lrama masterの[入力文法](https://github.com/ruby/lrama/blob/f58bbe406e660e2d7d2b77e827832754ccdea3c2/parser.y)。
 
-[L2] Lrama PR #774の調査時点headの入力文法。`https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/parser.y`
+[L2] Lrama PR #774の調査時点headの[入力文法](https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/parser.y)。
 
-[L3] 同headのLR/scanner生成経路。`https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/lib/lrama/states.rb`
+[L3] 同headの[LR/scanner生成経路](https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/lib/lrama/states.rb)。
 
-[L4] 同headの通常行／fallback行の解決。`https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/lib/lrama/state/scanner_accepts.rb`
+[L4] 同headの[通常行／fallback行の解決](https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/lib/lrama/state/scanner_accepts.rb)。
 
-[B1] GNU Bison Manual, §5.8.3 LAC。`https://www.gnu.org/software/bison/manual/html_node/LAC.html`
+[B1] GNU Bison Manual, [§5.8.3 LAC](https://www.gnu.org/software/bison/manual/html_node/LAC.html)。
 
-[B2] GNU Bison Manual, §3.7.7 Freeing Discarded Symbols。`https://www.gnu.org/software/bison/manual/html_node/Destructor-Decl.html`
+[B2] GNU Bison Manual, [§3.7.7 Freeing Discarded Symbols](https://www.gnu.org/software/bison/manual/html_node/Destructor-Decl.html)。
 
-[F1] Flex Manual, §7 How the Input Is Matched、§10 Start Conditions。伝統的な最長一致・宣言順と、手動start conditionの比較対象。`https://westes.github.io/flex/manual/Matching.html` / `https://westes.github.io/flex/manual/Start-Conditions.html`
+[F1] Flex Manual, [§7 How the Input Is Matched](https://westes.github.io/flex/manual/Matching.html)、[§10 Start Conditions](https://westes.github.io/flex/manual/Start-Conditions.html)。伝統的な最長一致・宣言順と、手動start conditionの比較対象。
 
-[P1] 保存済み設計`lrama_pslr_design(1).md`、2026-07-05。特に§5.2、§5.6–5.7。過去の設計資料であり、2026-09-05時点の実装状態の根拠には用いない。
+[P1] [[0002-pslr-parser-generation|Lrama に PSLR(1) パーサ生成を導入する]]。過去の構文案・導入方針との比較に使用し、2026-09-05時点の実装状態の根拠には用いない。
