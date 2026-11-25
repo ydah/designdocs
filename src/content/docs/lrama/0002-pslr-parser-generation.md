@@ -5,7 +5,7 @@ description: PSLR(1) パーサ生成の構成、論文との差分、マージ�
 status: proposed
 tags: [lrama, pslr, parser-generator, lexer, language-composition]
 authors: [ydah]
-updated: 2026-09-06
+updated: 2026-11-25
 ---
 
 | 項目 | 内容 |
@@ -26,13 +26,13 @@ Lrama に、現在のパーサ状態が受理できるトークンだけを字�
 - `%token-pattern`、`%lex-prec`、`%lex-tie`、layout トークンを導入し、pseudo-scanner の候補制約と衝突解決を文法側で宣言できるようにする。
 - 生成パーサが字句解析を所有する pure モードと、既存レキサから問い合わせる bridge モードを提供する。
 - コアアルゴリズムは PR の構成を採用するが、生成コードの無条件シンボル出力と状態型の型パニングはマージ前に修正する。
-- IELR 拡張の近似、LAC の確保コスト、テーブルサイズは、実文法で計測しながら段階的に改善する。
+- IELR 拡張の近似、LAC の確保コスト、テーブルサイズは実文法で計測しながら段階的に改善する。
 
 ## 判断理由
 
-PSLR(1) は、`>` と `>>` のように同じ入力接頭辞が構文文脈によって別トークンになる問題を、手書きのレキサ状態だけに依存せず扱える。PR は conflict profile、`scanner_accepts`、`length_precedences`、fallback、LAC、layout という論文の中心要素を実装し、既存生成経路から opt-in で隔離している。
+PSLR(1) は `>` と `>>` のように同じ入力接頭辞が構文文脈によって別トークンになる問題を、手書きのレキサ状態だけに依存せず扱える。PR は conflict profile、`scanner_accepts`、`length_precedences`、fallback、LAC、layout という論文の中心要素を実装し、既存生成経路から opt-in で隔離している。
 
-一方、生成される全パーサへの外部シンボル混入と、状態型のサイズを仮定した読み出しは既存利用者や生成コードの正当性に影響する。そのため、機能全体は提案として維持しつつ、P1 の2件をマージ条件とする。
+一方、生成される全パーサへの外部シンボル混入と、状態型のサイズを仮定した読み出しは既存利用者や生成コードの正当性に影響する。そのため、機能全体は提案として維持しつつ、生成コードへの外部シンボル混入と状態型のサイズを仮定した読み出しの2件をマージ条件とする。
 
 ## 影響範囲
 
@@ -51,14 +51,14 @@ PSLR(1) は、`>` と `>>` のように同じ入力接頭辞が構文文脈に�
 
 ### 1.1 解こうとしている問題
 
-従来のスキャナ・パーサ分離モデルでは、**スキャナが構文的左文脈を知らない**ため、複数の副言語（sub-language）が合成された言語で誤トークン化が起きる。論文の代表例:
+従来のスキャナ・パーサ分離モデルでは、**スキャナが構文的左文脈を知らない**ため、複数の副言語（sub-language）が合成された言語で誤トークン化が起きる。論文の代表例を以下に示す。
 
 ```cpp
 vector<list<string>> v;   // ここの ">>" は '>' '>' でなければならない
 a >> b;                   // ここの ">>" は '>>' でなければならない
 ```
 
-伝統的スキャナは最長一致で常に `'>>'` を返すため、前者で構文エラーになる。
+論文が前提とする最長一致方式のスキャナは常に `'>>'` を返すため、`vector<list<string>> v;` では構文エラーになる。
 
 **pseudo-scanner**（定義 3.1.1）の発想は単純で、スキャナが返す候補を「現在のパーサ状態 `sp` が受理しうるトークン集合 `acc(sp)`」に制限する。すると副言語の遷移が構文的左文脈から自動的に決まる。
 
@@ -160,14 +160,14 @@ flowchart TD
 
 | 論文 | Lrama | identity conflict | length conflict | 常に self-consistent (Thm 3.2.11) |
 |---|---|---|---|---|
-| `<∼` | `<~` | 右トークンが勝つ | 最長一致 | ✅ |
-| `<-` | `<-` | 右トークンが勝つ | （指定しない） | ✅ |
-| `-∼` | `-~` | （指定しない） | 最長一致 | ✅ |
-| `<<` | `<<` | 右トークンが勝つ | 右トークンが勝つ | ✅ |
-| `-<` | `-<` | （指定しない） | 右トークンが勝つ | ✅ |
-| `<s` | `<s` | 右トークンが勝つ | 最短一致 | ❌（同一トークン時のみ ✅） |
-| `-s` | `-s` | （指定しない） | 最短一致 | ❌（同一トークン時のみ ✅） |
-| `><` | **未実装** | 左が勝つ | 右が勝つ | ❌（論文も自己矛盾として不採用）|
+| `<∼` | `<~` | 右トークンが勝つ | 最長一致 | はい |
+| `<-` | `<-` | 右トークンが勝つ | （指定しない） | はい |
+| `-∼` | `-~` | （指定しない） | 最長一致 | はい |
+| `<<` | `<<` | 右トークンが勝つ | 右トークンが勝つ | はい |
+| `-<` | `-<` | （指定しない） | 右トークンが勝つ | はい |
+| `<s` | `<s` | 右トークンが勝つ | 最短一致 | いいえ（同一トークン時のみはい） |
+| `-s` | `-s` | （指定しない） | 最短一致 | いいえ（同一トークン時のみはい） |
+| `><` | **未実装** | 左が勝つ | 右が勝つ | いいえ（論文も自己矛盾として不採用）|
 
 実装が従う性質は次の3点である。
 
@@ -177,7 +177,7 @@ flowchart TD
 
 ### 3.4 正規表現サブセット
 
-`ScannerFSA` が受理する構文（`lib/lrama/scanner_fsa.rb`）:
+`ScannerFSA` が受理する構文（`lib/lrama/scanner_fsa.rb`）を以下に示す。
 
 - リテラル、エスケープ `\/ \* \+ \? \( \) \[ \] \\ \{`
 - グループ `(...)`、選択 `|`、反復 `* + ?`
@@ -194,7 +194,7 @@ flowchart TD
 
 ### 4.1 Scanner FSA `Σs` の構築
 
-`ScannerFSA#build_fsa`:
+`ScannerFSA#build_fsa` の処理を以下に示す。
 
 1. 各 `%token-pattern` の正規表現を Thompson 構成で NFA に変換
 2. 全 NFA を単一の開始状態から ε 結合
@@ -212,7 +212,7 @@ flowchart TD
 
 ### 4.2 `acc(sp)` の計算
 
-`States#acceptable_tokens_for_pslr(state, filtered_lookaheads = nil, expand_ties:, include_layout:)`:
+`States#acceptable_tokens_for_pslr(state, filtered_lookaheads = nil, expand_ties:, include_layout:)` の処理を以下に示す。
 
 ```text
 acc(sp) = { 終端シフト遷移のシンボル }
@@ -235,7 +235,7 @@ acc(sp) = { 終端シフト遷移のシンボル }
 | `PREFER_OLD` | 置き換えない（最短一致側） |
 | `UNRESOLVED` | 規則なし |
 
-演算子 → 行列の写像:
+演算子から行列への写像を以下に示す。
 
 | 演算子 | `[left][right]` | `[right][left]` |
 |---|---|---|
@@ -253,7 +253,7 @@ acc(sp) = { 終端シフト遷移のシンボル }
 
 #### 4.4.1 conflict profile（Def 3.2.17）
 
-入力 `ξ` の scanner conflict profile は 3 つ組 `(Ts, ts, Tl)`:
+入力 `ξ` の scanner conflict profile は 3 つ組 `(Ts, ts, Tl)` で表す。
 
 - `Ts`: `ξ` の**真の接頭辞**にマッチするトークン全体
 - `ts`: `Ts` の中で最高優先度の一致のトークン（なければ undefined）
@@ -285,7 +285,7 @@ return RESOLVED(winners.first) if winners.size == 1
 # 4. それ以外 → UNRESOLVED（報告対象）
 ```
 
-論文の記述との対応:
+論文の記述との対応を以下に示す。
 
 | 論文 Obs 3.2.18 | 実装 |
 |---|---|
@@ -315,11 +315,11 @@ end
 ```
 
 - `visited` キーが論文の `profile_map[(Ts, ts, Tl)] ∋ s'_s` に相当し、**停止性**と**無限ループ回避**を保証する
-- `path` は Lrama 独自の追加で、コンフリクト報告時に**再現入力（witness）**を添えられるようにしている
+- `path` は Lrama 独自の追加で、コンフリクト報告時に**再現入力（witness）** を添えられるようにしている
 
 #### 4.4.4 fallback 行（論文 3.5.1）
 
-`compute_fallback_row` は `acceptable_tokens` に「生成 FSA が知る全トークン」を与え、`fallback: true` で解決する。段階的に緩める:
+`compute_fallback_row` は `acceptable_tokens` に「生成 FSA が知る全トークン」を与え、`fallback: true` で解決する。制約は段階的に緩める。
 
 1. 明示的 `%lex-prec` を適用
 2. 長さ conflict は最長一致で補完（`fallback_precedes?`）
@@ -330,13 +330,13 @@ end
 
 ### 4.5 IELR(1) 拡張: 状態互換性判定（論文 3.4.3）
 
-論文の定義（Def 3.4.3、Thm 3.4.2 で簡約済み）:
+論文の定義（Def 3.4.3、Thm 3.4.2 で簡約済み）を以下に示す。
 
 > `sp` と `s'p` が互換 ⟺ `∀ξ`: `M(ξ,acc(sp)) = ∅ ∨ M(ξ,acc(s'p)) = ∅` または `∆(M(ξ,acc(sp))) = ∆(M(ξ,acc(s'p)))`
 
 論文はこれを毎マージ判定で評価すると遅すぎるとし、**pairwise レベルに落とす**ことを推奨する（FSA を 1 回走査して全トークン対の解決を要約しておく）。
 
-Lrama の実装（`Pslr::PairwiseResolution`）:
+Lrama の実装（`Pslr::PairwiseResolution`）を以下に示す。
 
 ```ruby
 def compatible_accept_sets?(left_acc, right_acc)
@@ -371,7 +371,7 @@ end
 
 ### 4.7 検証とレポート（論文 3.2.1 の指導原理）
 
-論文は、スキャナのコンフリクトを黙って解決せず報告することを原則としている。`States#validate!` は次の検査を実行する。
+論文はスキャナのコンフリクトを報告せずに解決しないことを原則としている。`States#validate!` は次の検査を実行する。
 
 | 検査 | 深刻度 | 論文対応 |
 |---|---|---|
@@ -410,7 +410,7 @@ int yy_pseudo_scan_result(int parser_state, const char *input,
                           size_t input_len, yypslr_scan_result *result);
 ```
 
-論文の擬似コードとの対応:
+論文の擬似コードとの対応を以下に示す。
 
 | 論文 Def 3.2.16 | 生成 C |
 |---|---|
@@ -472,35 +472,35 @@ NEWS が正直に述べているとおり、**このモードは「まだ消費�
 
 ### 6.1 実装済み要素
 
-実装済み要素と論文の対応は、[付録 C](#付録-c-論文との実装対応表)に示す。以下では、マージ判断に影響する差分を扱う。
+実装済み要素と論文の対応は[付録 C](#付録-c-論文との実装対応表)に示す。以下では、マージ判断に影響する差分を扱う。
 
 ### 6.2 未実装（論文でも future work のもの）
 
 | 要素 | 論文の位置づけ | Lrama |
 |---|---|---|
-| 非対称 lexical tie（`%lex-tie ID -> non-reserved`） | 3.3 future work | ❌ |
-| 型/タグ単位の一括 `%token-action` | 3.6 で「実装済み」と記述 | ❌ **論文は実装済みと述べている点に注意** |
-| layout 値の任意型化（lexeme 以外の蓄積） | 3.6 future work | ❌ |
-| lexical nonterminal / `%lex` / lexical parser | 3.6 future work | ❌（NEWS に明記） |
-| scoped declarations（namespace 方式） | 3.7 future work | ❌ |
-| scoped declarations（副言語開始記号方式） | 3.7 future work | ❌ |
-| scope ごとの複数 fallback 行 | 3.7 future work | ❌ |
+| 非対称 lexical tie（`%lex-tie ID -> non-reserved`） | 3.3 future work | 未実装 |
+| 型/タグ単位の一括 `%token-action` | 3.6 で「実装済み」と記述 | 未実装。**論文は実装済みと述べている点に注意** |
+| layout 値の任意型化（lexeme 以外の蓄積） | 3.6 future work | 未実装 |
+| lexical nonterminal / `%lex` / lexical parser | 3.6 future work | 未実装（NEWS に明記） |
+| scoped declarations（namespace 方式） | 3.7 future work | 未実装 |
+| scoped declarations（副言語開始記号方式） | 3.7 future work | 未実装 |
+| scope ごとの複数 fallback 行 | 3.7 future work | 未実装 |
 
 > `state/scanner_accepts.rb` の冒頭コメントに `%lex-scope` への言及があるが、対応する実装・ディレクティブは存在しない。**書きかけのコメントが残っている**（要削除）。
 
 ### 6.3 アルゴリズム上の実質的な差分
 
-以下では、マージ判断に影響するアルゴリズム上の差分を示す。
+以下ではマージ判断に影響するアルゴリズム上の差分を示す。
 
 #### (A) IELR phase 2 の PSLR 拡張が無い
 
-論文 3.4.3 冒頭:
+論文3.4.3の冒頭には次のようにある。
 
 > We extend IELR(1) for PSLR(1) in two steps. **First, we extend IELR(1) phase 2 to annotate parser states based on their contributions to pseudo-scanner conflicts.** Second, we extend IELR(1) phase 3 by adjusting its state compatibility test to consider these extended annotations.
 
 Lrama は**第 2 段階しか実装していない**。`compute_pslr` は既存の `compute_inadequacy_annotations`（LR(1) 相対の不適格性のみ）を呼び、pseudo-scanner conflict への寄与に基づく注釈は作らない。代わりに phase 3 で `propagate_lookaheads_without_filter` を使い、**フィルタなしの先読みから直接 `acc` を組み立てて比較**する。
 
-帰結:
+この定義から次の性質が導かれる。
 
 - IELR の「コンフリクトに寄与する先読みだけを見る」という枝刈りが PSLR パスでは効かない
 - 先読み集合のどんな差異も `acc` の差異として現れうる → **過剰分割**
@@ -508,13 +508,13 @@ Lrama は**第 2 段階しか実装していない**。`compute_pslr` は既存�
 
 #### (B) 状態互換性判定が「解決結果」ではなく「トークンの在/不在」
 
-論文 3.4.3:
+論文3.4.3には次のようにある。
 
 > if `R` selects **the same highest precedence match** for every pairwise pseudo-scanner conflict in `sp` as in `s'p`, then it is guaranteed to select the same highest precedence match for every complete pseudo-scanner conflict
 
 Lrama の `pair_compatible?` は解決結果を一切参照せず、`presence` の一致だけを見る。
 
-具体例で差が出る:
+具体例では次の差が出る。
 
 ```text
 %token-pattern RANGLE />/
@@ -531,11 +531,11 @@ Lrama の判定: `1 ≠ 3` かつどちらも `0` でない → **非互換 → 
 
 `<<` / `-<` は論文 3.7 が「非伝統的演算子の最大の力は、似た字句を持つ他トークンのためにあるトークンを無効化できること」と述べる、まさに主力の用途である。そこで過剰分割が起きるのは設計上の弱点。
 
-なお `presence` が `1` vs `2`（片方だけ別のトークン）のケースでは論文と一致して非互換になるので、**健全性（unsound になる）ではなく完全性（必要以上に分割する）の問題**である点は補足しておく。
+なお `presence` が `1` vs `2`（片方だけ別のトークン）のケースでは論文と一致して非互換になるので、問題は**必要以上に分割する完全性**にある。
 
 #### (C) コンフリクト報告の粒度
 
-論文 Def 3.2.20 の 15 行目:
+論文のDef 3.2.20の15行目には次のようにある。
 
 ```text
 else if (entry = ∅) do:
@@ -586,13 +586,13 @@ Lrama は shorter-wins でも `current_tokens.include?(result.token_name)` な�
 
 1. **論文の骨格を忠実に再現している**。conflict profile による有限分類、`scanner_accepts` / `length_precedences` / `state_to_accepting_state` の 3 表構成、`pseudo_scan` の擬似コードとの逐語的な対応まで、主要な定義がコード上で追跡できる。コメントに定義番号が入っているのも良い。
 
-2. **論文の指導原理（3.2.1）を守っている**。通常行のコンフリクトを宣言順で黙って解決せず error にする、useless `%lex-prec` を報告する、tie 候補を報告する — この 3 点は PSLR の思想の核であり、実装が妥協していない。
+2. **論文の指導原理（3.2.1）を守り**、通常行のコンフリクトを宣言順で報告せずに解決しない、useless `%lex-prec` を報告する、tie 候補を報告する。以上の3点は PSLR の思想の核であり、実装が妥協していない。
 
 3. **論文にない健全性検査を足している**。矛盾 `%lex-prec` の拒否、自己ペア演算子の検証、nullable パターンの拒否、witness 付きコンフリクト報告。いずれも実用上価値がある。
 
 4. **実験的機能として適切に隔離されている**。`%define lr.type pslr` が opt-in で、既定経路は無変更。NEWS が制限事項を正直に列挙している。
 
-5. **テストが厚い**。integration fixture 11 セット（template argument lists、layout/comment、keyword context、shift chain、implicit literal、token action、pure、fallback precedence 等）+ unit spec 多数 + regression/family spec。RBS 署名も追随している。
+5. **テスト範囲が広い。** integration fixture 11 セット（template argument lists、layout/comment、keyword context、shift chain、implicit literal、token action、pure、fallback precedence 等）+ unit spec 多数 + regression/family spec。RBS 署名も追随している。
 
 ### 7.2 修正すべき問題
 
@@ -613,7 +613,7 @@ typedef short yy_state_t_compat;
 const yy_state_t_compat *stack_base = (const yy_state_t_compat *)stack_base_v;
 ```
 
-しかし `yy_state_t` は `typedef <%= output.int_type_for([output.yynstates - 1]) %>` であり、状態数 128 未満の文法では **`yytype_int8`（1 バイト）**になる。1 バイト配列を `short*` で読むのは未定義動作で、返る状態番号がでたらめになる。
+しかし `yy_state_t` は `typedef <%= output.int_type_for([output.yynstates - 1]) %>` であり、状態数 128 未満の文法では **`yytype_int8`（1 バイト）** になる。1 バイト配列を `short*` で読むのは未定義動作で、不正な状態番号になる。
 
 → `void*` 経由をやめて `yy_state_t*` を直接受けるか、テンプレート変数で正しい型を埋め込む。
 
@@ -669,7 +669,7 @@ new_state.pslr_item_lookahead_set = original.pslr_item_lookahead_set
 
 #### P3: レポートの規模
 
-`Reporter::Pslr#report_acceptable_tokens` / `report_scanner_accepts` が全パーサ状態を列挙する。Ruby の `parse.y` 規模（数千状態）では出力が実用外になる。状態範囲指定か閾値が要る。
+`Reporter::Pslr#report_acceptable_tokens` / `report_scanner_accepts` が全パーサ状態を列挙する。Ruby の `parse.y` 規模では出力が数千状態分に達する。状態範囲指定か閾値が要る。
 
 #### P4: 細かい指摘
 
@@ -681,21 +681,21 @@ new_state.pslr_item_lookahead_set = original.pslr_item_lookahead_set
 
 | 論文の要素 | fixture / spec | 評価 |
 |---|---|---|
-| `>` vs `>>`（論文の主題例） | `pslr_template_argument_lists.{y,l}` | ✅ |
-| layout / コメント | `pslr_layout_comment.{y,l}` | ✅ |
-| 予約語 vs 識別子（tie） | `pslr_keyword_context.{y,l}` | ✅ |
-| fallback 行 | `pslr_fallback_precedence.{y,l}` | ✅ |
-| pure モード | `pslr_pure.y` | ✅ |
-| `%token-action` | `pslr_token_action.y` | ✅ |
-| 暗黙リテラルパターン | `pslr_implicit_literal.{y,l}` | ✅ |
-| 状態増加ガード | `pslr_growth_limit.y` | ✅ |
-| プロファイル解決器 | `state/scanner_accepts_spec.rb`(442行) | ✅ |
-| FSA / 正規表現サブセット | `scanner_fsa_spec.rb`(364行) | ✅ |
-| pairwise 互換性 | `pslr/pairwise_resolution_spec.rb`(49行) | ⚠️ 薄い |
-| 論文の Fig 3.3/3.4/3.5（曖昧性の 3 例） | — | ❌ **未網羅** |
-| Fig 3.2c/3.2d（C 複数行コメントの `-s`） | 部分的 | ⚠️ |
-| Table 3.2（`><` の自己矛盾） | — | ❌（未実装なので妥当） |
-| 大規模実文法（C99 / SQL / Ruby parse.y） | — | ❌ **未検証** |
+| `>` vs `>>`（論文の主題例） | `pslr_template_argument_lists.{y,l}` | 網羅 |
+| layout / コメント | `pslr_layout_comment.{y,l}` | 網羅 |
+| 予約語 vs 識別子（tie） | `pslr_keyword_context.{y,l}` | 網羅 |
+| fallback 行 | `pslr_fallback_precedence.{y,l}` | 網羅 |
+| pure モード | `pslr_pure.y` | 網羅 |
+| `%token-action` | `pslr_token_action.y` | 網羅 |
+| 暗黙リテラルパターン | `pslr_implicit_literal.{y,l}` | 網羅 |
+| 状態増加ガード | `pslr_growth_limit.y` | 網羅 |
+| プロファイル解決器 | `state/scanner_accepts_spec.rb`(442行) | 網羅 |
+| FSA / 正規表現サブセット | `scanner_fsa_spec.rb`(364行) | 網羅 |
+| pairwise 互換性 | `pslr/pairwise_resolution_spec.rb`(49行) | 薄い |
+| 論文の Fig 3.3/3.4/3.5（曖昧性の 3 例） | — | **未網羅** |
+| Fig 3.2c/3.2d（C 複数行コメントの `-s`） | 部分的 | 一部 |
+| Table 3.2（`><` の自己矛盾） | — | 未実装なので妥当 |
+| 大規模実文法（C99 / SQL / Ruby parse.y） | — | **未検証** |
 
 論文 4 章は Bison 自身・Levine SQL・ISO C99・C++ template argument list の 4 ケーススタディで、状態数増加と可読性を定量評価している。**Lrama 側に同等の規模検証がない**のが最大のギャップ。特に 6.3 (A)(B) の過剰分割は小さな fixture では露見しないため、実文法での状態数計測が必須。
 
@@ -777,42 +777,42 @@ new_state.pslr_item_lookahead_set = original.pslr_item_lookahead_set
 
 | 論文の要素 | 節/定義 | Lrama | 状態 |
 |---|---|---|---|
-| pseudo-scanner の基本挙動 | Def 3.1.1 | `acc(sp)` 制約 + `yy_pseudo_scan_result` | ✅ |
-| `%token-re` | 3.1 | `%token-pattern`（改名） | ✅ |
-| 引用リテラルの暗黙正規表現 | 3.1 | `synthesize_implicit_literal_token_patterns!` | ✅ |
-| autolength の既定＝最長一致 | Def 3.2.2 | `resolution(t, t) == PREFER_NEW` | ✅ |
-| 伝統的演算子 `<~ <- -~` | Def 3.2.3 | 実装 | ✅ |
-| 非伝統的演算子 `<< -< <s -s` | Def 3.2.4 | 実装 | ✅ |
-| `><` を採用しない | 3.2.5 | 未実装（論文と同じ判断） | ✅ |
-| 字句優先度関数 `∆` | Def 3.2.5 | `ProfileResolver` | ✅ |
-| 非推移性 | 3.2.1 | `identity_precedes?` は直接規則のみ | ✅ |
-| `acc(ss)`, `acc(sp,ss)` | Def 3.2.12 | `ScannerFSA#acc_ss` / `current_acceptable_tokens` | ✅ |
-| `state_to_accepting_state` | Def 3.2.13 | `yy_state_to_accepting` | ✅ |
-| `scanner_accepts` | Def 3.2.14 | `State::ScannerAccepts` | ✅ |
-| `length_precedences` | Def 3.2.15 | `LengthPrecedences`（3 値に拡張） | ✅ |
-| `pseudo_scan` | Def 3.2.16 | `yy_pseudo_scan_result` | ✅ |
-| conflict profile | Def 3.2.17 | `(shorter_tokens, selected, current_tokens)` | ✅ |
-| profile 単位の解決 | Obs 3.2.18 | `resolve_normal` | ✅ |
-| `compute_scanner_accepts` / `resolve` | Def 3.2.19/3.2.20 | `CompleteProfileComputer` | ⚠️ 報告粒度が異なる |
-| useless `%lex-prec` の報告 | 3.2.1 | `LexPrec#useless_rules` + 警告 | ✅ |
-| `ties(t)` の反射・対称・推移 | Def 3.3.1 | union-find | ✅ |
-| tie 込みの `acc(sp)` | Def 3.3.2 | `expand_lexical_ties` | ✅ |
-| symbol-set 絡みは conflict 対のみ tie | 3.3 | `declaration_pairs` の `specificity < 3` 分岐 | ✅ |
-| token 同士は無条件 tie | 3.3 | `specificity == 3` | ✅ |
-| lexical tie candidate 報告 | Def 3.3.3 | `collect_lexical_tie_candidates` | ✅ |
-| `%lex-no-tie yyall yyall` と個別上書き | 3.3 | specificity 0/1/2/3 | ✅ |
-| tie 済みへの no-tie 宣言を拒否 | 3.3 | `rebuild_relations` で例外 | ✅ |
-| 状態互換性判定 | Def 3.4.1/3.4.3 | `PairwiseResolution` | ⚠️ 近似（6.3 参照） |
-| merge-stable 性の利用 | Thm 3.4.2 | 前提として `∆` の合流を評価しない | ✅ |
-| 未解決同士はマージする | 3.4.3 | presence 一致で許容 | ✅ |
-| canonical LR(1) 切替オプション | 3.4.3 | `%define pslr.tables canonical-lr` | ⚠️ 近似 |
-| fallback 行 | 3.5.1 | `compute_fallback_row` | ✅ |
-| fallback は伝統規則で補完 | 3.5.1 | 最長一致 + 宣言順 | ✅ |
-| character token | 3.5.1 | 1 バイト消費 + `YYUNDEF` | ✅ |
-| LAC | 3.5.2 | `yy_lac_check_` | ✅ |
-| tie 済みトークンにアクションを作らない | 3.5.2 | tie は `acc` にのみ影響 | ✅ |
-| layout トークン | 3.6 | `YYLAYOUT*` | ✅ |
-| layout の再スキャン | 3.6 | `yypslr_scan_with_layout` | ✅ |
-| layout テキストの蓄積と次アクションでの参照 | 3.6 | `YYPSLR_LAYOUT_TEXT` | ⚠️ pure モードのみ |
-| layout の split-stable 最適化 | 3.6 | presence 判定で自然に成立 | ✅ |
-| `%token-action`（個別） | 3.6 | 実装 | ✅ |
+| pseudo-scanner の基本挙動 | Def 3.1.1 | `acc(sp)` 制約 + `yy_pseudo_scan_result` | 対応 |
+| `%token-re` | 3.1 | `%token-pattern`（改名） | 対応 |
+| 引用リテラルの暗黙正規表現 | 3.1 | `synthesize_implicit_literal_token_patterns!` | 対応 |
+| autolength の既定＝最長一致 | Def 3.2.2 | `resolution(t, t) == PREFER_NEW` | 対応 |
+| 伝統的演算子 `<~ <- -~` | Def 3.2.3 | 実装 | 対応 |
+| 非伝統的演算子 `<< -< <s -s` | Def 3.2.4 | 実装 | 対応 |
+| `><` を採用しない | 3.2.5 | 未実装（論文と同じ判断） | 対応 |
+| 字句優先度関数 `∆` | Def 3.2.5 | `ProfileResolver` | 対応済み |
+| 非推移性 | 3.2.1 | `identity_precedes?` は直接規則のみ | 対応済み |
+| `acc(ss)`, `acc(sp,ss)` | Def 3.2.12 | `ScannerFSA#acc_ss` / `current_acceptable_tokens` | 対応済み |
+| `state_to_accepting_state` | Def 3.2.13 | `yy_state_to_accepting` | 対応済み |
+| `scanner_accepts` | Def 3.2.14 | `State::ScannerAccepts` | 対応済み |
+| `length_precedences` | Def 3.2.15 | `LengthPrecedences`（3 値に拡張） | 対応済み |
+| `pseudo_scan` | Def 3.2.16 | `yy_pseudo_scan_result` | 対応済み |
+| conflict profile | Def 3.2.17 | `(shorter_tokens, selected, current_tokens)` | 対応済み |
+| profile 単位の解決 | Obs 3.2.18 | `resolve_normal` | 対応済み |
+| `compute_scanner_accepts` / `resolve` | Def 3.2.19/3.2.20 | `CompleteProfileComputer` | 一部対応：報告粒度が異なる |
+| useless `%lex-prec` の報告 | 3.2.1 | `LexPrec#useless_rules` + 警告 | 対応済み |
+| `ties(t)` の反射・対称・推移 | Def 3.3.1 | union-find | 対応済み |
+| tie 込みの `acc(sp)` | Def 3.3.2 | `expand_lexical_ties` | 対応済み |
+| symbol-set 絡みは conflict 対のみ tie | 3.3 | `declaration_pairs` の `specificity < 3` 分岐 | 対応済み |
+| token 同士は無条件 tie | 3.3 | `specificity == 3` | 対応済み |
+| lexical tie candidate 報告 | Def 3.3.3 | `collect_lexical_tie_candidates` | 対応済み |
+| `%lex-no-tie yyall yyall` と個別上書き | 3.3 | specificity 0/1/2/3 | 対応済み |
+| tie 済みへの no-tie 宣言を拒否 | 3.3 | `rebuild_relations` で例外 | 対応済み |
+| 状態互換性判定 | Def 3.4.1/3.4.3 | `PairwiseResolution` | 一部対応：近似（6.3 参照） |
+| merge-stable 性の利用 | Thm 3.4.2 | 前提として `∆` の合流を評価しない | 対応済み |
+| 未解決同士はマージする | 3.4.3 | presence 一致で許容 | 対応済み |
+| canonical LR(1) 切替オプション | 3.4.3 | `%define pslr.tables canonical-lr` | 一部対応：近似 |
+| fallback 行 | 3.5.1 | `compute_fallback_row` | 対応済み |
+| fallback は伝統規則で補完 | 3.5.1 | 最長一致 + 宣言順 | 対応済み |
+| character token | 3.5.1 | 1 バイト消費 + `YYUNDEF` | 対応済み |
+| LAC | 3.5.2 | `yy_lac_check_` | 対応済み |
+| tie 済みトークンにアクションを作らない | 3.5.2 | tie は `acc` にのみ影響 | 対応済み |
+| layout トークン | 3.6 | `YYLAYOUT*` | 対応済み |
+| layout の再スキャン | 3.6 | `yypslr_scan_with_layout` | 対応済み |
+| layout テキストの蓄積と次アクションでの参照 | 3.6 | `YYPSLR_LAYOUT_TEXT` | 一部対応：pure モードのみ |
+| layout の split-stable 最適化 | 3.6 | presence 判定で自然に成立 | 対応済み |
+| `%token-action`（個別） | 3.6 | 実装 | 対応済み |

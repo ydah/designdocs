@@ -5,7 +5,7 @@ description: 非終端記号の変更が記号・規則・状態・意味アク�
 status: proposed
 tags: [lrama, impact-analysis, parser-generator, grammar, developer-tooling]
 authors: [ydah]
-updated: 2026-09-05
+updated: 2026-11-25
 ---
 
 | 項目 | 内容 |
@@ -64,7 +64,7 @@ Lrama に **impact analysis** を追加する。非終端記号の規則変更�
 
 Lrama が対象とする文法ファイルは、CRuby の `parse.y` のように **2,000 規則規模** に達することがある。この規模では次の問題が起きる。
 
-- ある非終端記号の規則を 1 行変えたとき、どの規則・どの状態・どのアクションが影響を受けるのか、人間には追えない。
+- ある非終端記号の規則を 1 行変えたとき、どの規則・どの状態・どのアクションが影響を受けるのかを手作業で漏れなく追跡するのは難しい。
 - 変更してから `lrama` を実行し、conflict が増えて初めて影響に気づく。しかも conflict は変更箇所から遠い状態で顕在化することが多く、原因の特定に時間がかかる。
 - レビュー時に「この変更の影響範囲はここまでです」と説明する客観的な材料がない。
 - 既存の `--report`／`--trace`／`--diagram` は「文法全体の状態」を出力するもので、**「特定の記号を起点とした影響の伝播」** を問う手段が存在しない。
@@ -120,7 +120,7 @@ $ lrama --impact=arg,args --impact-format=json --impact-file=impact.json parse.y
 
 **UC-3: conflict の原因追跡**
 
-conflict が出た状態 ID がわかっているとき、どの記号の変更がその状態に届きうるかを逆引きする。
+conflict が出た状態 ID がわかっているとき、原因候補の非終端記号を指定し、その影響経路に該当する状態 ID が含まれうるかを確認する。
 
 **UC-4: 大規模文法の理解**
 
@@ -206,7 +206,7 @@ action  影響を受ける意味アクション・型タグ
 state   影響を受ける LR 状態・遷移・先読み・conflict
 ```
 
-CLI の `--impact-level` は `symbol` < `rule` < `action` < `state` < `all` の包含順とし、上位を指定すると下位の情報も含む。既定は `rule`。
+CLI の `--impact-level` は `symbol` < `rule` < `action` を包含順とし、`state` は別軸、`all` は両方の情報を含む。既定は `rule`。
 
 ### 4.3 伝播方向の直感
 
@@ -221,7 +221,7 @@ graph LR
   end
 ```
 
-`expr` の規則を変えると:
+`expr` の規則を変えた場合の影響を以下に示す。
 
 - **上流**: `expr` を使っている `line`、その先の `input`、`$accept` の `FIRST`/`nullable` が変わりうる。
 - **下流**: `expr` の RHS に現れる `NUM` や `'+'` の `FOLLOW` が変わりうる。`expr: expr '+' expr` から `'+'` を消せば、`FOLLOW(expr)` から `'+'` が消えるかもしれない。
@@ -234,7 +234,7 @@ graph LR
 
 ### 5.1 既存ワークフローとの関係
 
-現行の `Lrama::Command#execute_command_workflow`:
+現行の `Lrama::Command#execute_command_workflow` の処理を以下に示す。
 
 ```ruby
 def execute_command_workflow
@@ -547,14 +547,14 @@ states.includes_relation  #=> Hash[State::Action::Goto, Array[State::Action::Got
 states.lookback_relation  #=> Hash[state_id, Hash[rule_id, Array[State::Action::Goto]]]
 ```
 
-手順:
+手順は次のとおり。
 
 1. ターゲット `A` に関係する goto 集合 `G₀` を求める。
    `G₀ = { (q, A) | q ∈ states, q.transition(A) が存在 } ∪ { (q, X) | X ∈ A の RHS の非終端記号 }`
 2. `reads_relation` と `includes_relation` の **逆グラフ**上で `G₀` から到達可能な goto 集合 `G*` を求める。
    `Follow(p, B)` は `Reads`/`Includes` で辿れる先の集合の和で定義されるため、逆向きに辿ったものが「影響を受ける goto」になる。
 3. `lookback_relation` を使って `G*` に依存する `(state_id, rule_id)` を求める。これが **先読み集合が変わりうる reduce** である。
-4. 3 で得られた reduce を持つ状態を、`reasons: [:lookahead]` として `StateEntry` に加える。
+4. 手順 3 で得られた reduce を持つ状態を、`reasons: [:lookahead]` として `StateEntry` に加える。
 
 既存の `Lrama::Digraph` クラスは不動点計算用だが、ここで必要なのは単純な逆到達可能性なので BFS で十分。
 
@@ -609,7 +609,7 @@ for rule in used_by[A]:
       - refs が非空 → :rule_action（`%type` 変更時に修正が必要な箇所）
 ```
 
-さらに:
+さらに次を行う。
 
 - `A` の `%type` タグ `t` について、同じタグを持つ記号の `%destructor` / `%printer` を `kind: :destructor` / `:printer` として列挙する（`Grammar#printers`, `Symbol#destructor`）。
 - `A` の RHS 長を変える変更は `defines[A]` の各規則自身の `$1..$n` を壊すため、`defines[A]` のアクションも `kind: :rule_action` で列挙する。
@@ -626,7 +626,7 @@ for rule in used_by[A]:
 | `%rule opt(X)` | `opt_expr`, `opt_stmt` のように実体化された記号群が生成される | `Parameterized::Resolver#created_lhs_list` から「テンプレート名 → 生成記号」を引き、テンプレート名指定時は全インスタンスをターゲットに展開 |
 | stdlib (`option`, `list` 等) | 同上 | 同上。ただし既定では `--impact` の対象外（`--impact-include-stdlib` で有効化） |
 
-**`%inline` への対応に必要な既存コード変更**:
+**`%inline`への対応に必要な既存コード変更**
 
 `Grammar::Inline::Resolver#resolve` は展開後の `RuleBuilder` を返すが、「どの inline 記号がどこに展開されたか」を保持していない。次を追加する。
 
@@ -638,7 +638,7 @@ attr_reader :expansions  #: Hash[String, Array[Lexer::Location]]
 
 これにより、`--impact=some_inline_rule` に対して「この inline 規則は N 箇所に展開されており、その全てが影響を受ける」と報告できる。
 
-**元ソース位置への逆写像** (`OriginResolver`):
+**元ソース位置への逆写像**として、`OriginResolver`を次の形で追加する。
 
 ```ruby
 # @rbs (Grammar::Rule rule) -> Lexer::Location?
@@ -702,7 +702,7 @@ LEVEL is one of:
     all                          include all the above
 ```
 
-`Options` への追加:
+`Options` へ次を追加する。
 
 ```ruby
 # lib/lrama/options.rb
@@ -712,7 +712,7 @@ attr_accessor :impact_opts #: Hash[Symbol, untyped]?
 #     include_stdlib: bool, diff: String? }
 ```
 
-`OptionParser` への追加:
+`OptionParser` へ次を追加する。
 
 ```ruby
 VALID_IMPACT_LEVELS  = %w[symbol rule action state all].freeze
@@ -814,7 +814,7 @@ Notes
 **表示方針**
 
 - 既存の `.output` レポートの列揃えスタイル（`sprintf("%5d %s", ...)`）に寄せる。
-- 影響記号には「経路」と「変わりうる計算の種類」を併記する。理由を示さない一覧は採用しない。
+- 影響記号には「経路」と「変わりうる計算の種類」を併記する。一覧だけでは影響理由を説明できない。
 - 件数が多い場合は既定で上位 50 件に丸め、`... and N more` を出す（`--impact-file` 指定時は全件出力）。
 
 ### 9.2 JSON 形式

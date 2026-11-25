@@ -6,7 +6,7 @@ status: proposed
 tags: [lrama, lex, parser-generator, lexer, language-composition]
 authors: [ydah]
 related: [0002-pslr-parser-generation, 0005-scoped-declarations]
-updated: 2026-09-06
+updated: 2026-11-25
 ---
 
 | 項目 | 内容 |
@@ -69,9 +69,9 @@ Lrama に、入れ子の括弧、コメント、文字列内部の構造を通�
 
 ### 2.1 論文が提案していること
 
-Denny 2010 §3.6、本文pp.75–76／添付PDF pp.82–83は、`%lex`、lexical nonterminal、lexical parser、開始・終了トークン、layoutとしての扱い、字句パーサーの階層を**将来の実装案**として述べている。階層をまたぐエラー回復についても研究課題としている。[D1]
+Denny 2010 §3.6、本文pp.75–76／添付PDF pp.82–83は、`%lex`、lexical nonterminal、lexical parser、開始・終了トークン、親のLRスタックに返さず読み飛ばすlayoutとしての扱い、字句パーサーの階層を**将来の実装案**として述べている。階層をまたぐエラー回復についても研究課題としている。[D1]
 
-したがって、同論文の実験結果を、本書で設計する`%lex`ランタイムの正しさや性能の実証として扱わない。
+したがって、Denny 2010の実験結果を、本書で設計する`%lex`ランタイムの正しさや性能の実証として扱わない。
 
 ### 2.2 確認したLramaの実装
 
@@ -82,7 +82,7 @@ Denny 2010 §3.6、本文pp.75–76／添付PDF pp.82–83は、`%lex`、lexical
 
 masterの`parser.y`と、PR headの`parser.y`、`lib/lrama/states.rb`、`lib/lrama/state/scanner_accepts.rb`を確認した。PR側には、`%token-pattern`、`%token-action`、`%lex-prec`、`%lex-tie`、`%lex-no-tie`を読む経路がある。また、scanner構築、状態分割、scanner accepts構築の経路がある。`ScannerAccepts`は、通常行の未解決競合を宣言順で解決しない。一方、fallback行では宣言順を使う。[L1][L2][L3][L4]
 
-本書はその作業ブランチを統合候補とするが、masterにこれらがmerge済みとは仮定しない。公開構文、型、メソッド名のうち本書で新たに定めたものは、すべて提案である。
+本書はその作業ブランチを統合候補とするが、masterに列挙したディレクティブ、scanner構築経路、競合解決の挙動がmerge済みとは仮定しない。公開構文、型、メソッド名のうち本書で新たに定めたものは、すべて提案である。
 
 ### 2.3 論文から具体化・変更する点
 
@@ -95,7 +95,7 @@ masterの`parser.y`と、PR headの`parser.y`、`lib/lrama/states.rb`、`lib/lra
 | 回復 | 階層対応は研究課題 | abortを既定とし、明示的な`error`規則による閉領域回復だけを追加可能にする |
 | fallbackの同順位 | 論文§3.5は伝統的規則を使用 | 新ランタイムでは恣意的にtokenを選ばず、構造化された曖昧な字句エラーを返す |
 
-終了方法の変更は、閉じ記号に対する`$n`・`@n`・意味値破棄を通常の文法規則と同じモデルで扱うためである。「閉じ記号を無視してEOFに置換する」実装にはしない。
+終了トークンをshiftした後に`LOCAL_EOF`を供給する方式を採るのは、閉じ記号に対する`$n`・`@n`・意味値破棄を通常の文法規則と同じモデルで扱うためである。「閉じ記号を無視してEOFに置換する」実装にはしない。
 
 ## 3. 目的と非目的
 
@@ -146,7 +146,7 @@ recovery-declaration := "%lex-recovery" IDENTIFIER ("abort" | "rules")
 
 `%lex <node> block`は字句非終端と返却値の型を同時に宣言する。既存の`%type <node> block`と併記してもよいが、型が異なればエラーにする。同じシンボルを`%token`や`%token-pattern`でも宣言することは禁止する。
 
-`%lex-layout L ...`は、Lのフレーム内で自動的に読み飛ばしてよいlayoutシンボルの許可集合を指定する。省略時は`none`である。`%lex-recovery`の既定値は`abort`である。同じ対象への矛盾する再宣言は宣言順にかかわらずエラーにする。
+`%lex-layout L ...`は、`%lex-layout`の第1引数で指定した字句非終端のフレーム内で、自動的に読み飛ばしてよいlayoutシンボルの許可集合を指定する。省略時は`none`である。`%lex-recovery`の既定値は`abort`である。同じ対象への矛盾する再宣言は宣言順にかかわらずエラーにする。
 
 ### 4.2 対応する字句パターン
 
@@ -297,9 +297,9 @@ ScanCandidate = {
 
 ### 7.2 scanner競合
 
-通常profileは完全な候補集合に対して一意のwinnerを要求する。pairwise比較を列挙順にfoldしてwinnerを決めない。既存のcomplete conflict profile方式を、delivery descriptorを失わない候補IDへ拡張する。[D1 §3.2.7][L4]
+通常profileは完全な候補集合に対して一意のwinnerを要求する。pairwise比較を列挙順にfoldしてwinnerを決めない。候補集合全体から一意のwinnerを決める既存方式を、delivery descriptorを保持する候補IDへ拡張する。[D1 §3.2.7][L4]
 
-`%lex-prec`、`%lex-tie`のoperandとして字句根Lを指定することはV1では禁止する。これらはprimitive tokenの字句集合に対する宣言であり、文脈自由な領域全体の比較とは異なる。開始token間の関係を指定させる。
+初版では、`%lex-prec`、`%lex-tie`のoperandとして字句根Lを指定することを禁止する。これらはprimitive tokenの字句集合に対する宣言であり、文脈自由な領域全体の比較とは異なる。開始token間の関係を指定させる。
 
 fallback用の全token集合は、そのprogramから到達するprimitive tokenとlexical import、および許可されたlayoutで構成する。他の無関係な字句programを起動候補に追加しない。
 
@@ -411,7 +411,7 @@ frameの確保は開始tokenのcommit前に行う。開始tokenの値構築中�
 
 実EOFが根の終了前に現れた場合は`LEX_UNTERMINATED`である。実EOFを`LOCAL_EOF`に変換して成功させない。終了tokenのshift後、根のreduceに必要な入力は`LOCAL_EOF`だけで足りるように子programを生成する。
 
-### 8.6 アプリケーションからの入口
+### 8.6 アプリケーション向けAPI
 
 新しい統合ランタイムには、既存の外部lexer用`yyparse`とは区別した`yyparse_input`を生成する。生成headerの契約は次の形とする。実際のprefixは既存のAPI prefix設定に従い、`%parse-param`は追加引数として引き継ぐ。
 
@@ -704,7 +704,7 @@ error[LEX_AMBIGUOUS_ENTRY]: one start match selects two lexical parsers
 | local回復 | OPEN error CLOSE | taintedな閉領域を親error経路へ返す |
 | 未閉じnested | 外側内の未閉じ子 | 全体abort、frame/valueを一回ずつcleanup |
 | LAC | 合成tokenの受理可能性検査 | 入力read回数とaction回数が増えない |
-| default reduction | 有無の比較試験 | 有効化する最適化についてtoken/dispatch traceが等しい |
+| default reduction | 有無の比較テスト | 有効化する最適化についてtoken/dispatch traceが等しい |
 | limits | 深さ・bytes・stackの上限前後 | 境界値で定義どおり失敗しoverflowしない |
 | binary | 埋込みNUL | EOFと誤認しない |
 | chunk境界 | 全てのbyte位置でreadを分割 | 一括入力と同じtoken、値、span、diagnostic |
@@ -718,7 +718,7 @@ error[LEX_AMBIGUOUS_ENTRY]: one start match selects two lexical parsers
 
 ### 17.3 完了条件
 
-文法検証、全error code、二重consume防止、子の局所EOF、layout、resource cleanup、scopeとの連携、生成Cのsanitizer試験が揃うまで実験的機能とする。テストの実施結果と性能値は実装PRで追記する。
+文法検証、全error code、二重consume防止、子の局所EOF、layout、resource cleanup、scopeとの連携、生成Cのsanitizerテストが揃うまで実験的機能とする。テストの実施結果と性能値は実装PRで追記する。
 
 ## 18. 実装分割
 
@@ -727,10 +727,10 @@ error[LEX_AMBIGUOUS_ENTRY]: one start match selects two lexical parsers
 | 1 | `parser.y`、`lib/lrama/lexer.rb`、生成`parser.rb`に宣言を追加 | 新構文をIR化し、非対応例を正しい位置で拒否 |
 | 2 | program分割、字句import、境界検証 | パーサー実行なしでIRのgolden testが通る |
 | 3 | CALL descriptorをscanner profileへ接続 | token IDだけで潰れるdispatch競合を検出 |
-| 4 | 新しい生成C schedulerと共有入力所有 | 単一字句根と親境界の差分試験 |
-| 5 | 入れ子、意味値move、trivia、limits | fault injectionとsanitizer試験 |
-| 6 | `rules`回復とscope連携 | エラー時のtrace・cleanup試験 |
-| 7 | 文書、report、互換性試験 | `%lex`未使用の既存fixtureに意味的な差分がない |
+| 4 | 新しい生成C schedulerと共有入力所有 | 単一字句根と親境界の差分テスト |
+| 5 | 入れ子、意味値move、trivia、limits | fault injectionとsanitizerテスト |
+| 6 | `rules`回復とscope連携 | エラー時のtrace・cleanupテスト |
+| 7 | 文書、report、互換性テスト | `%lex`未使用の既存fixtureに意味的な差分がない |
 
 新規ファイル候補は`grammar/lexical_definition.rb`、`grammar/parser_program.rb`、`state/scan_candidate.rb`、`template/lexical_runtime.c.erb`とする。`States`・`State`には既存のLR生成責務を残し、別のパーサー生成フレームワークを重複実装しない。
 

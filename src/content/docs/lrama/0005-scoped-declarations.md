@@ -6,7 +6,7 @@ status: proposed
 tags: [lrama, scoped-declarations, parser-generator, lexer, grammar]
 authors: [ydah]
 related: [0002-pslr-parser-generation, 0004-lex-directive]
-updated: 2026-09-06
+updated: 2026-11-25
 ---
 
 | 項目 | 内容 |
@@ -62,7 +62,7 @@ scopeの情報を単一の実行時変数やLR itemの一つのfieldに集約す
 
 ## 1. 適用モデル
 
-例えば`>>`を通常の式では右shiftとして認識し、template引数では二つの`>`として扱い、その内部の括弧付き式では再び右shiftとして認識する。この違いを、利用者がlexerの状態変数やscope stackを更新するactionを書かずに指定できるようにする。
+§15で扱うC++由来の小さい言語では、`>>`を通常の式では右shiftとして認識し、template引数では二つの`>`として扱い、その内部の括弧付き式では再び右shiftとして認識する。この違いを、利用者がlexerの状態変数やscope stackを更新するactionを書かずに指定できるようにする。
 
 スコープは、ソースファイルの宣言ブロックやlexerのstart conditionではない。文法上の特定の非終端出現から導出される範囲に、名前付き宣言環境を適用する。
 
@@ -70,7 +70,7 @@ scopeの情報を単一の実行時変数やLR itemの一つのfieldに集約す
 
 Denny 2010 §3.7、本文pp.77–79／添付PDF pp.84–86は、namespaceによるsymbol複製と、部分文法への入口となる**RHSの非終端の特定の出現**に基づく方法を提案している。itemへのscope記録、複数scopeによる競合、状態分割、scopeごとのfallbackも述べるが、これらは将来案である。[D1]
 
-同論文は、通常のcanonical LRがscopeを記録しないため、scope対応によってcanonical LRの状態でさえさらに分割し得ると指摘している。本書でも、未注釈のcanonical LRとの一致を最終的な意味の保証にしない。[D1 §3.7]
+Denny 2010は、通常のcanonical LRがscopeを記録しないため、scope対応によってcanonical LRの状態でさえさらに分割し得ると指摘している。本書でも、未注釈のcanonical LRとの一致を最終的な意味の保証にしない。[D1 §3.7]
 
 本書で新たに定めるのは、公開構文、静的な継承、宣言種別ごとのshadowing、FOLLOWのscope所有、scope付きFIRST/closure、競合解決、保守的で実装可能な参照構築、診断・リソース制限・テストである。
 
@@ -80,7 +80,7 @@ Denny 2010 §3.7、本文pp.77–79／添付PDF pp.84–86は、namespaceによ�
 
 目的は、共有文法の宣言の分離、意味を変える状態mergeの禁止、scope境界での正しい先読み、矛盾の生成時検出、エラー時のscope情報の保持である。
 
-V1でscope化するものは、字句優先順位、lexical tie/no-tie、layout集合、構文優先順位・結合性である。symbolの名前・token番号・型・pattern・意味actionはglobalとする。
+初回実装（以下V1）でscope化するものは、字句優先順位、lexical tie/no-tie、layout集合、構文優先順位・結合性である。symbolの名前・token番号・型・pattern・意味actionはglobalとする。
 
 以下は対象外とする。
 
@@ -90,7 +90,7 @@ V1でscope化するものは、字句優先順位、lexical tie/no-tie、layout�
 - namespace/module/import機能、任意のGLR、任意の曖昧さの自動解消。
 - 最小状態数、canonical構築を経由しない生成速度、CRuby全体への即時適用。
 
-この範囲を明示するのは、後述する有限性、同一tokenの意味の保存、先読みの固定を実装上の契約にするためである。
+V1の範囲を明示するのは、後述する有限性、同一tokenの意味の保存、先読みの固定を実装上の契約にするためである。
 
 ## 4. 公開構文
 
@@ -173,7 +173,7 @@ effective(S) = resolve(effective(parent(S)), declarations(S))
 enter(caller, S) = effective(S)
 ```
 
-これにより、同じSをHOSTから呼んでもTEMPLATEから呼んでも、Sの中の宣言の意味は同じになる。親へ戻るときはcallerの環境へ復帰するが、「戻す」という意味actionは不要である。
+`enter(caller, S)`が常に`effective(S)`を選ぶため、同じSをHOSTから呼んでもTEMPLATEから呼んでも、Sの中の宣言の意味は同じになる。親へ戻るときはcallerの環境へ復帰するが、「戻す」という意味actionは不要である。
 
 動的なoverlay継承を採用しない理由は、再帰的な文法呼出しのたびに異なる宣言環境を組み立てることを避け、環境集合を有限に固定するためである。呼出し元ごとに違う意味が必要なら、異なる名前のscopeを定義する。
 
@@ -352,7 +352,7 @@ inner_tail:
 ;
 ```
 
-この場合は`)`もINNERに属する。scopeを開始・終了する空規則とC actionを挿入するのではなく、文法で所有範囲を明示する。
+閉じ`)`を`inner_tail`のRHSに含めた場合は`)`もINNERに属する。scopeを開始・終了する空規則とC actionを挿入するのではなく、文法で所有範囲を明示する。
 
 templateの`>`と`>>`の例では、閉じ`>`をtemplate側の優先順位で選択する必要があるため、§15の例は`template_tail: expression '>'`を使う。入口非終端のFOLLOWまで無条件に子scopeを適用する実装は採用しない。
 
@@ -550,7 +550,7 @@ layoutを消費しても親のLR stackは進まない。このため、layoutの
 
 **scope-aware canonical参照構築を必ず実装し、その結果に保守的な状態同値化を適用する。** 初期段階から、通常IELRに少量のmetadataを追加しただけで正しいと仮定しない。
 
-この選択は状態数・生成コストを優先したものではなく、scope、lookahead、scanner選択の意味を明確にし、既存実装との境界を検証可能にするためである。大きい文法に対してbudgetを超える場合は明示的に失敗し、scopeを無視してLALRへ戻さない。
+scope-aware canonical参照構築を採用するのは、状態数・生成コストを優先するためではなく、scope、lookahead、scanner選択の意味を明確にし、既存実装との境界を検証可能にするためである。大きい文法に対してbudgetを超える場合は明示的に失敗し、scopeを無視してLALRへ戻さない。
 
 新設定`%define lr.scope-construction canonical`を定義し、scope使用時の省略値もcanonicalとする。既存の`lr.type`を明示して別の生成方式を要求している場合、対応が実装されていなければ組合せエラーにする。黙って別の方式に切り替えない。
 
@@ -591,7 +591,7 @@ while worklist is not empty:
         add_transition(state, transition_key, interned(next))
 ```
 
-ここでterminalのtransition keyはlogical TokenId、非終端はNonterminalInstanceである。stateのkeyは両者を区別したitem集合である。
+擬似コードの`transition_key`は、terminalではlogical TokenId、非終端ではNonterminalInstanceとする。stateのkeyは両者を区別したitem集合である。
 
 ### 12.4 保守的な状態同値化
 
@@ -617,7 +617,7 @@ scannerの同値性は「現在のaccepting stateで返すtoken」だけで判�
 
 参照構築は機能の意味とテストoracleである。大規模文法への実用化のために、canonical全体を作らずにscope-aware状態を直接構築する最適化を別PRで追加できる。
 
-その際も、少なくとも以下の情報を既存のIELR処理へ接続する。
+scope-aware状態を直接構築する最適化を追加するときも、少なくとも以下の情報を既存のIELR処理へ接続する。
 
 | 既存責務 | 追加する情報 |
 |---|---|
@@ -672,7 +672,7 @@ LACの成否を理由に、すでに取得したtokenを別scopeで取り直さ�
 結果が異なる／一部だけmatch              → AMBIGUOUS_SCOPED_FALLBACK
 ```
 
-最後のケースで、どれかのscopeのCALLや意味actionを実行しない。エラー範囲は候補の最長span等から決定的に構成できるが、tokenの意味を恣意的に選んだことにはしない。
+結果が異なる、または一部のscopeだけがmatchする場合は、どれかのscopeのCALLや意味actionを実行しない。エラー範囲は候補の最長span等から決定的に構成できるが、tokenの意味を恣意的に選んだことにはしない。
 
 Denny 2010 §3.7のscope別fallbackという案を具体化しつつ、PRの従来fallbackにある宣言順選択は新scope経路には持ち込まない。[D1][L4]
 
@@ -732,7 +732,7 @@ Y<X<6>>;
 
 `template_tail`にTEMPLATEを指定すると、閉じ`>`もTEMPLATEでscanされる。括弧付き式の`paren_tail`はHOSTを明示的に選択するため、その内部ではRSHIFTを使用できる。
 
-`%lex-no-tie`はこの例で`>`とRSHIFTを常に一緒に候補へ追加しないことを表す。どちらも候補になる箇所の解決は、各scopeの`%lex-prec`が行う。
+`%lex-no-tie`は§15の文法で`>`とRSHIFTを常に一緒に候補へ追加しないことを表す。どちらも候補になる箇所の解決は、各scopeの`%lex-prec`が行う。
 
 ## 16. parameterized rules、inline、midrule action
 
@@ -767,7 +767,7 @@ statement:
 ;
 ```
 
-この場合、blockを呼ぶentry environmentはCODEである。開始tokenを親の候補として選ぶ際には、親のlexical宣言を使用する。起動後のblock内のtoken選択にはCODEを使用する。
+`%with-scope CODE block`と指定した場合、blockを呼ぶentry environmentはCODEである。開始tokenを親の候補として選ぶ際には、親のlexical宣言を使用する。起動後のblock内のtoken選択にはCODEを使用する。
 
 同じblockの開始が二つのentry environmentを要求し、子の観測挙動が異なる場合は、開始時点でscope/dispatch conflictにする。親を進めてから子のenvironmentを決め直さない。
 
@@ -865,7 +865,7 @@ scope使用時は新しいtable構築契約と診断が有効になる。現在�
 
 scope内の`%token-pattern`をV1から外した理由は、同じTokenIdがscopeによって異なる字句集合を持つと、あるscopeでだけmatchしたtokenによって別scopeのLR itemまで進めてしまう危険があるためである。この場合はscanner候補だけでなく、tokenの配送とparser側の導出候補の絞り込みまで再設計する必要がある。
 
-V1ではglobalな異なるtoken IDとpatternを定義し、それらの優先順位やtieをscope化する。未対応のpattern shadowingを「動くはず」として受理しない。
+V1ではglobalな異なるtoken IDとpatternを定義し、それらの優先順位やtieをscope化する。未対応のpattern shadowingを使った文法は「動くはず」として受理せず、生成時エラーにする。
 
 ### 20.3 Ruby向け導入
 
@@ -875,7 +875,7 @@ V1ではglobalな異なるtoken IDとpatternを定義し、それらの優先順
 
 ## 21. 検証計画
 
-### 21.1 単体試験
+### 21.1 単体テスト
 
 | 対象 | 期待する結果 |
 |---|---|
@@ -890,7 +890,7 @@ V1ではglobalな異なるtoken IDとpatternを定義し、それらの優先順
 | 禁止した宣言 | scope内のpattern/type/actionを位置付きで拒否 |
 | 同義environment | 意味を共有し、診断用の名前は失わない |
 
-### 21.2 構築・実行時試験
+### 21.2 構築・実行時テスト
 
 | ケース | 期待する結果 |
 |---|---|
@@ -915,32 +915,32 @@ V1ではglobalな異なるtoken IDとpatternを定義し、それらの優先順
 
 参照構築と最適化構築の両方で、同じscanner規則を使用する。比較するtraceはtoken ID、match長、位置、CALL/RETURN、reduceの元rule ID、layout span、error-kind、消費終端である。最終的なaccept/rejectだけでは足りない。
 
-ランダム試験は、小さいscope数、重なるtoken pattern、nullable helper、二つ以上のentry、親子で反転した優先順位を組み合わせて生成する。入力をbounded enumerationし、異なるchunk分割、終了位置、error挿入で実行する。
+ランダムテストは、小さいscope数、重なるtoken pattern、nullable helper、二つ以上のentry、親子で反転した優先順位を組み合わせて生成する。入力をbounded enumerationし、異なるchunk分割、終了位置、error挿入で実行する。
 
-scope名のalpha-renaming、scope定義順の変更、無関係なscopeの追加は意味を変えないというmetamorphic testを行う。`%left`の行順の変更は意味を変えるので、この不変性試験の対象にしない。
+scope名のalpha-renaming、scope定義順の変更、無関係なscopeの追加は意味を変えないというmetamorphic testを行う。`%left`の行順の変更は意味を変えるので、この不変性テストの対象にしない。
 
 ### 21.4 補助モデルで確認した範囲
 
 §15の小さい文法について、tagged FIRST・closure・gotoと先読み固定を実装した補助Pythonモデルで、掲載した三つの入力が期待するtoken列になることを確認した。このモデルのcanonical state数は43だった。
 
-これはLramaに本機能を実装して実行した結果ではない。また、scope全体の正しさ、generalなconflict resolver、layout、error recovery、生成Cの所有権を検証したものではない。これらは実装PRの受入試験として実行する。
+これはLramaに本機能を実装して実行した結果ではない。また、scope全体の正しさ、generalなconflict resolver、layout、error recovery、生成Cの所有権を検証したものではない。これらは実装PRの受入テストとして実行する。
 
 ## 22. 実装分割と完了条件
 
 | 段階 | 変更 | 受入条件 |
 |---|---|---|
 | 1 | 構文、ScopeDefinition、occurrence IR | 新構文のsource位置と適用範囲を正しく保持 |
-| 2 | 静的継承と宣言resolver | 全宣言種別の単体試験、矛盾診断 |
-| 3 | RuleInstanceとtagged lookahead | FIRST/closure/goto、nullable・FOLLOW試験 |
+| 2 | 静的継承と宣言resolver | 全宣言種別の単体テスト、矛盾診断 |
+| 3 | RuleInstanceとtagged lookahead | FIRST/closure/goto、nullable・FOLLOWテスト |
 | 4 | scope-aware canonical構築 | §15とintrinsic conflict fixture |
 | 5 | scoped scanner profileとlayout/CALL | 完全競合とdelivery差の検出 |
-| 6 | runtime、LAC、fallback | token固定、stack pop、エラー位置の試験 |
+| 6 | runtime、LAC、fallback | token固定、stack pop、エラー位置のテスト |
 | 7 | 安全な状態同値化、report、budget | 参照traceとの一致、生成の再現性 |
 | 8 | `%lex`統合と既存文法回帰 | frame境界・scope境界が混同されない |
 
 新規クラス候補は`Grammar::ScopeDefinition`、`Grammar::DeclarationEnvironment`、`Grammar::SymbolOccurrence`、`Grammar::RuleInstance`とする。既存の`State::Item`、`States`、`State::ScannerAccepts`に対応関係を接続し、reportにも同じIRを使う。
 
-公開可能とする条件は、V1の対応宣言の実装、禁止組合せの拒否、参照構築と生成Cの差分試験、scopeなしの互換性試験、resource failure試験である。加えて、lookaheadの環境、layoutの非消費遷移、CALL先、エラー時のtoken固定が保存される必要がある。効率的なIELR直接構築は条件に含めない。
+公開可能とする条件は、V1の対応宣言の実装、禁止組合せの拒否、参照構築と生成Cの差分テスト、scopeなしの互換性テスト、resource failureテストである。加えて、lookaheadの環境、layoutの非消費遷移、CALL先、エラー時のtoken固定が保存される必要がある。効率的なIELR直接構築は条件に含めない。
 
 `scope IDをstateに付けた`、または`templateの一例が通った`だけでは完了としない。
 
@@ -952,9 +952,9 @@ scope名のalpha-renaming、scope定義順の変更、無関係なscopeの追加
 
 [L2] PR #774 headの[入力文法](https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/parser.y)。
 
-[L3] 同headの[生成・分割・再計算経路](https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/lib/lrama/states.rb)。
+[L3] PR #774 headの[生成・分割・再計算経路](https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/lib/lrama/states.rb)。
 
-[L4] 同headの[scanner conflict profileとfallback](https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/lib/lrama/state/scanner_accepts.rb)。
+[L4] PR #774 headの[scanner conflict profileとfallback](https://github.com/ydah/lrama/blob/ab81b73f66abc605afeeea30d7842ef44aba3274/lib/lrama/state/scanner_accepts.rb)。
 
 [B1] GNU Bison Manual, [§5.8.3 LAC](https://www.gnu.org/software/bison/manual/html_node/LAC.html)。
 

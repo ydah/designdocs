@@ -22,12 +22,12 @@ Universal Parserは当面、`parse.y`の外部依存を`rb_parser_config_t`へ�
 まず、librubyへの直接依存が増える退行をCIで検出し、既存の直接依存を解消する。
 単体ライブラリとして配布する作業は、具体的な利用者と保守担当が決まるまで開始しない。
 
-この方針では、Phase 0の合意形成と並行してPhase 1、2を進める。
-Phase 3、4は、単体配布を目指すと決まった場合だけ実施する。
+この方針ではPhase 0の合意形成と並行してPhase 1、2を進める。
+Phase 3、4は単体配布を目指すと決まった場合だけ実施する。
 
 ## 背景
 
-Universal Parserは、`parse.y`をCRuby本体（libruby）から切り離し、Ruby実装や開発ツールから利用できるようにする取り組みとして始まった。
+Universal Parserは`parse.y`をCRuby本体（libruby）から切り離し、Ruby実装や開発ツールから利用できるようにする取り組みとして始まった。
 当初の利用者にはmruby、PicoRuby、JRuby、TruffleRuby、Sorbetなどを想定していた。
 必要なCRuby関数を`rb_parser_config_t`（以下、config）に格納し、外部から渡す方式である。
 この方式は2023年6月に[Feature #19719](https://bugs.ruby-lang.org/issues/19719)として`ruby/ruby`へ導入された。
@@ -41,11 +41,11 @@ Universal Parserは、`parse.y`をCRuby本体（libruby）から切り離し、R
 
 Prismは複数言語向けのAPIを持つため、Universal Parserを外部へ配布する当初の必要性は弱まった。
 一方、`parse.y`の依存先をconfigへ集約すれば、`--parser=parse.y`を保守しやすくなる。
-この保守上の利点は、単体配布の有無にかかわらず残る。
+この保守上の利点は単体配布の有無にかかわらず残る。
 
 ## 現状
 
-`rb_parser_config_t`のメンバー数は、2023年5月の209個から104個へ減った。
+`rb_parser_config_t`のメンバー数は2023年5月の209個から104個へ減った。
 このうち43個はシグネチャに`VALUE`を含み、Rubyオブジェクトの存在を前提とする。
 数値は基準コミットの[`rubyparser.h`](https://github.com/ruby/ruby/blob/72d4cf2e9ab72899958450638409ebdc18e9855b/rubyparser.h)を14カテゴリに分けて数えた結果である。
 
@@ -100,8 +100,8 @@ PR #19534が追加しようとした`rb_memhash`の直接呼び出しも、こ�
 
 ## 直近の修正
 
-[PR #19534](https://github.com/ruby/ruby/pull/19534)は、文字列リテラルのハッシュをseedなしのdjb2から`rb_memhash`へ変更する提案だった。
-目的は、衝突するキーによる二次時間の解析を防ぐことにある。
+[PR #19534](https://github.com/ruby/ruby/pull/19534)は文字列リテラルのハッシュをseedなしのdjb2から`rb_memhash`へ変更する提案だった。
+目的は衝突するキーによる二次時間の解析を防ぐことにある。
 このPRは2026年11月22日にマージされず閉じられた。
 同等の修正を再提案する場合は、通常ビルドだけで`rb_memhash`を使い、`UNIVERSAL_PARSER`では現在のdjb2を残す。
 
@@ -132,11 +132,11 @@ parser_memhash(const void *ptr, rb_len_t len)
 }
 ```
 
-`rb_parser_str_hash`と`rb_char_p_hash`は、従来どおり`parser_memhash`を呼ぶ。
+`rb_parser_str_hash`と`rb_char_p_hash`は従来どおり`parser_memhash`を呼ぶ。
 djb2の定義も`#ifdef`内へ移さないと、通常ビルドでunused functionの警告が出る。
 同じ問題は[`474f4188`](https://github.com/ruby/ruby/commit/474f4188)で確認できる。
 
-この修正だけでは、`UNIVERSAL_PARSER`側にハッシュ衝突の問題が残る。
+通常ビルドだけで`rb_memhash`を使う修正では、`UNIVERSAL_PARSER`側にハッシュ衝突の問題が残る。
 `literal_hash`はstのコールバックであり、configを指す`p`を受け取れないため、config経由で`rb_memhash`を呼べない。
 seedを渡す方式には次の候補がある。
 
@@ -144,19 +144,19 @@ seedを渡す方式には次の候補がある。
 2. ハッシュ表の作成時にconfigからseedを取り出し、パーサ側の変数に保持する。
 
 PR #19534のテストは再利用できる。
-`case_labels`も同じハッシュを使うため、case/whenの重複検査に対するテストも追加する。
+`case_labels`も`literal_hash`と同じハッシュ関数を使うため、case/whenの重複検査に対するテストも追加する。
 
 ## 実施計画
 
 ロードマップはPhase 0から4までの5段階で進める。
-各Phaseの完了条件を、次のPhaseへ進むための判定に使う。
+各Phaseに完了条件を置き、Phase 0とPhase 1、2は並行し、Phase 3以降は単体配布を決めた場合だけ進める。
 
 ### Phase 0: ゴールの再決定
 
 - [ ] 選択肢AからCをもとに、yui-knkとUniversal Parserの方針を相談する
 - [ ] 開発者会議の議題として提案する
 
-完了条件は、Universal Parserをどこまで進めるかについて合意があることとする。
+完了条件はUniversal Parserをどこまで進めるかについて合意があることとする。
 Phase 0はPhase 1、2と並行して進める。
 
 ### Phase 1: 直接依存の退行防止
@@ -165,9 +165,9 @@ Phase 0はPhase 1、2と並行して進める。
 - [ ] `UNIVERSAL_PARSER`ビルドのパーサ側オブジェクトを`nm -u`で調べるCIチェックを追加する
 - [ ] 許可リストにないシンボルを検出した場合はCIを失敗させる
 - [ ] 現在の直接依存は既知の例外として許可リストへ入れ、Phase 2で減らす
-- [ ] configへ関数を追加する手順を文書化する。source hashを追加した[`93638d07`](https://github.com/ruby/ruby/commit/93638d07)を例にする
+- [ ] configへ関数を追加する手順を文書化する。programのsource hashを追加した[`93638d07`](https://github.com/ruby/ruby/commit/93638d07)を例にする
 
-完了条件は、librubyへの新しい直接依存が追加されたときにCIが失敗することとする。
+完了条件はlibrubyへの新しい直接依存が追加されたときにCIが失敗することとする。
 
 ### Phase 2: 既存の直接依存の解消
 
@@ -178,39 +178,39 @@ Phase 0はPhase 1、2と並行して進める。
 - [ ] `rb_ispunct`を`parse.y`内へ移し、`rb_isspace`などと同じ扱いにする
 - [ ] `UNIVERSAL_PARSER`側のハッシュもseed付きにする
 
-完了条件は、Phase 1の許可リストからlibrubyの関数がなくなることとする。
+完了条件はPhase 1の許可リストからlibrubyの関数がなくなることとする。
 
 ### Phase 3: configからVALUEを除去
 
 104個のメンバーは性質ごとに扱う。
-`local_defined`、`dvar_defined`、`compile_callback`、source hashなど、呼び出し側との正当なインターフェースは残す。
+`local_defined`、`dvar_defined`、`compile_callback`、source hashなど、呼び出し側から値を受け取る必要があるインターフェースは残す。
 
 - [ ] `scan_digits`、`strtod`、`rtest`、`nil_p`、`long2int`などの小さな純粋関数を`parse.y`側へ移す
-- [ ] IO 7個、Error 6個、例外とEval 6個、VM 1個は、`VALUE`を作らずデータとして返し、`ruby_parser.c`側でRubyオブジェクトへ変換する
+- [ ] IO 7個、Error 6個、例外とEval 6個、VM 1個は`VALUE`を作らずデータとして返し、`ruby_parser.c`側でRubyオブジェクトへ変換する
 - [ ] String 11個、Array 2個、Numeric 1個の`VALUE`生成をやめ、`rb_parser_string_t`などのパーサ側の型へ置き換える
 - [ ] Encoding 19個をパーサ用の小さなencodingインターフェースへまとめる
 - [ ] SymbolとIDの15個を、internと`id2name`程度のインターフェースへ絞る
 - [ ] メモリ系11個を`malloc`、`realloc`、`free`だけにする。関数が渡されなければ標準の`malloc`を使う
 - [ ] `VALUE`の除去後、`gc_mark`と`gc_guard`を削除する
-- [ ] Ripper用4個の扱いは、Ripperを対象に含めるかというPhase 0の決定に従う
+- [ ] Ripper用4個の扱いはRipperを対象に含めるかというPhase 0の決定に従う
 
-完了条件は、configのシグネチャから`VALUE`がなくなることとする。
+完了条件はconfigのシグネチャから`VALUE`がなくなることとする。
 
 ### Phase 4: 単体ビルドと配布
 
 - [ ] `common.mk`へ、`parse.o`、`node.o`、`parser_st.o`などのパーサ側オブジェクトだけでライブラリを作るターゲットを追加する
 - [ ] librubyなしで`1 + 2`をパースする小さなCプログラムをCIで実行する。Ruby Parser開発日誌 (8) のデモを基準にする
 - [ ] `rubyparser.h`の公開範囲と互換性方針を決める
-- [ ] 配布形態を決める。2023年の案には`ruby/universal_parser`のgemがある
+- [ ] 配布形態を決める。2023年の[Feature #19719](https://bugs.ruby-lang.org/issues/19719)には`ruby/universal_parser`のgem案がある
 
-完了条件は、Ruby本体なしでCプログラムからASTを取得できることとする。
+完了条件はRuby本体なしでCプログラムからASTを取得できることとする。
 
 ## 未決事項
 
 ### Ripperを対象に含めるか
 
 Ripperの非推奨化は議論中である。
-Feature #21827の調査時点では、Rubyに同梱されるgemのうち`power_assert`だけがRipperを使い続けている。
+Feature #21827の調査時点ではRubyに同梱されるgemのうち`power_assert`だけがRipperを使い続けている。
 Ripperを対象外とする場合は、configのRipper用4個を削減対象から外せる。
 
 ### Prism APIを実装するか
