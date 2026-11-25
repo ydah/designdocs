@@ -12,3 +12,4 @@ public/pagefind/
 .env
 .env.*
 !.env.example
+*.tsuzuri/

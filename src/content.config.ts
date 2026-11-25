@@ -10,7 +10,7 @@ const normalizedTag = z.string().transform(normalizeTag).refine(Boolean, {
 });
 
 const docs = defineCollection({
-  loader: glob({ pattern: '**/*.md', base: './src/content/docs' }),
+  loader: glob({ pattern: ['**/*.md', '!**/*.tsuzuri/**'], base: './src/content/docs' }),
   schema: z.object({
     title: z.string().min(1),
     description: z.string().min(1).optional(),

@@ -12,6 +12,7 @@ const walkMarkdownFiles = (root) => {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       const fullPath = path.join(directory, entry.name);
       if (entry.isDirectory()) {
+        if (entry.name.endsWith('.tsuzuri')) continue;
         walk(fullPath);
       } else if (entry.isFile() && entry.name.endsWith('.md')) {
         files.push(fullPath);
